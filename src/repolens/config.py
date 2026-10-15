@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     max_indexed_file_bytes: int = Field(default=1_000_000, ge=1)
     git_timeout_seconds: float = Field(default=300.0, gt=0)
 
+    # Worker
+    job_lease_seconds: int = Field(default=60, ge=5)
+
     @property
     def mirrors_dir(self) -> Path:
         return self.data_dir / "mirrors"

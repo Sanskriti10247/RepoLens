@@ -73,6 +73,9 @@ def _created_at() -> Mapped[datetime]:
 
 
 SHA_CHECK = "~ '^([0-9a-f]{40}|[0-9a-f]{64})$'"  # SHA-1 and SHA-256 object formats
+# Literal predicate shared by the partial index and ON CONFLICT inference (which cannot use
+# bound parameters).
+JOB_NOT_TERMINAL_SQL = "status IN ('QUEUED', 'CLAIMED', 'RUNNING')"
 
 
 class Repository(Base):
@@ -364,7 +367,7 @@ class Job(Base):
             "uq_jobs_active_idempotency_key",
             "idempotency_key",
             unique=True,
-            postgresql_where=text("status IN ('QUEUED', 'CLAIMED', 'RUNNING')"),
+            postgresql_where=text(JOB_NOT_TERMINAL_SQL),
         ),
         Index(None, "repository_id", "status"),
     )

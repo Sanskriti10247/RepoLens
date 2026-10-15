@@ -85,6 +85,7 @@ branch = true
 
 [tool.importlinter]
 root_package = "repolens"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Layered architecture"
@@ -97,3 +98,17 @@ layers = [
 ]
 exhaustive = false
 
+
+[[tool.importlinter.contracts]]
+name = "Domain types stay free of IO frameworks"
+type = "forbidden"
+source_modules = ["repolens.domain"]
+forbidden_modules = [
+    "fastapi",
+    "sqlalchemy",
+    "repolens.api",
+    "repolens.worker",
+    "repolens.persistence",
+    "repolens.services",
+]
+allow_indirect_imports = true
