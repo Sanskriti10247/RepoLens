@@ -1,0 +1,95 @@
+[project]
+name = "repolens"
+version = "0.1.0"
+description = "Repository code graph, change-impact analysis and sandboxed test selection"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143",
+    "uvicorn>=0.54",
+    "pydantic>=2.14",
+    "pydantic-settings>=2.16",
+    "sqlalchemy>=2.1",
+    "alembic>=1.20",
+    "psycopg[binary]>=3.3",
+    "structlog>=26.1",
+]
+
+[project.scripts]
+repolens-api = "repolens.api.__main__:main"
+repolens-worker = "repolens.worker.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "coverage>=7.16",
+    "httpx>=0.28",
+    "ruff>=0.14",
+    "mypy>=1.18",
+    "import-linter>=2.5",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/repolens"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE", "C4", "SIM", "RUF", "PTH", "TID", "PL"]
+ignore = [
+    "PLR0913",  # many-argument constructors are common for value objects
+    "PLR2004",  # magic values are fine in tests and limits
+    "S603",     # subprocess without shell is the intended pattern; inputs are validated
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108", "PLR0915", "S607"]
+"migrations/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["repolens"]
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tree_sitter_python", "docker.*", "networkx.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --import-mode=importlib"
+markers = [
+    "integration: requires PostgreSQL (REPOLENS_DATABASE_URL)",
+    "docker: requires a Docker daemon",
+    "security: adversarial security checks",
+    "e2e: end-to-end pipeline tests",
+]
+filterwarnings = ["error::DeprecationWarning:repolens.*"]
+
+[tool.coverage.run]
+source = ["repolens"]
+branch = true
+
+[tool.importlinter]
+root_package = "repolens"
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture"
+type = "layers"
+layers = [
+    "(repolens.api) | (repolens.worker)",
+    "(repolens.services)",
+    "(repolens.persistence)",
+    "(repolens.domain)",
+]
+exhaustive = false
+
