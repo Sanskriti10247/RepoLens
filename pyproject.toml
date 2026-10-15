@@ -50,7 +50,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S108", "PLR0915", "S607"]
+"tests/**" = ["S101", "S105", "S106", "S107", "S108", "PLR0915", "S607"]
 "migrations/**" = ["E501"]
 
 [tool.mypy]
@@ -73,7 +73,11 @@ markers = [
     "security: adversarial security checks",
     "e2e: end-to-end pipeline tests",
 ]
-filterwarnings = ["error::DeprecationWarning:repolens.*"]
+filterwarnings = [
+    "error::DeprecationWarning:repolens.*",
+    # Starlette 1.8 prefers httpx2 for TestClient; switching dependencies is pending review.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.coverage.run]
 source = ["repolens"]

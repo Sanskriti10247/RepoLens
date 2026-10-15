@@ -10,25 +10,16 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from repolens.persistence.db import make_engine, make_session_factory, ping
+from repolens.persistence.migrations import alembic_config
 
-ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEST_DB = "postgresql+psycopg://repolens:repolens@127.0.0.1:5433/repolens_test"
-
-
-def alembic_config(database_url: str) -> Config:
-    cfg = Config(str(ROOT / "alembic.ini"))
-    cfg.set_main_option("sqlalchemy.url", database_url)
-    cfg.attributes["configure_logger"] = False
-    return cfg
 
 
 @pytest.fixture(scope="session")

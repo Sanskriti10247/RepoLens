@@ -2,7 +2,7 @@ import pytest
 from alembic import command
 from sqlalchemy import Engine, inspect
 
-from tests.conftest import alembic_config
+from repolens.persistence.migrations import alembic_config
 
 pytestmark = pytest.mark.integration
 
