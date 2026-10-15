@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
 import time
+import uuid
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,7 @@ from repolens.repository.git import (
     GitRunner,
     GitTimeout,
 )
+from repolens.repository.mirror import MirrorError, MirrorStore
 from tests.support.gitrepo import FixtureRepo
 
 pytestmark = pytest.mark.security
@@ -150,3 +153,55 @@ def test_blob_reader_reads_and_resyncs_after_oversize(runner: GitRunner, tmp_pat
         with pytest.raises(GitError):
             reader.read("0" * 40, max_bytes=100)
         assert reader.read(small, max_bytes=100) == b"hello"  # stream still in sync
+
+
+@pytest.mark.parametrize("evil_name", [".git", "..", ".GIT"])
+def test_fetch_rejects_trees_with_dangerous_entries(tmp_path: Path, evil_name: str) -> None:
+    """Objects are verified on receipt, so a crafted tree never reaches the mirror."""
+    repo = FixtureRepo(tmp_path / "evil")
+    blob = repo.git("hash-object", "-w", "--stdin")  # empty blob
+    inner = _mktree(repo, f"100644 blob {blob}\tconfig\n")
+    tree = _mktree(repo, f"040000 tree {inner}\t{evil_name}\n")
+    commit = repo.git("commit-tree", tree, "-m", "evil")
+    repo.git("update-ref", "refs/heads/main", commit)
+
+    runner = GitRunner(tmp_path / "home", GitPolicy(allowed_protocols=("file",)))
+    store = MirrorStore(tmp_path / "mirrors", runner)
+    with pytest.raises(MirrorError) as info:
+        store.fetch(uuid.uuid4(), repo.url, max_bytes=10**7)
+    assert "fsck" in str(info.value) or "dotgit" in str(info.value).lower()
+
+    # Control: without object verification the same fetch succeeds.
+    control = tmp_path / "control.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(control)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "protocol.file.allow=always",
+            "--git-dir",
+            str(control),
+            "fetch",
+            "-q",
+            repo.url,
+            "+refs/heads/*:refs/heads/*",
+        ],
+        check=True,
+        env={
+            "PATH": os.environ["PATH"],
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+        },
+    )
+
+
+def _mktree(repo: FixtureRepo, spec: str) -> str:
+    result = subprocess.run(
+        ["git", "mktree", "--missing"],
+        cwd=repo.path,
+        input=spec.encode(),
+        capture_output=True,
+        check=True,
+        env={"PATH": os.environ["PATH"], "GIT_CONFIG_GLOBAL": os.devnull},
+    )
+    return result.stdout.decode().strip()
