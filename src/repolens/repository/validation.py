@@ -26,10 +26,8 @@ class RepositoryLocator:
     host: str
     owner: str
     name: str
-
-    @property
-    def canonical_url(self) -> str:
-        return f"https://{self.host}/{self.owner.lower()}/{self.name.lower()}"
+    # Stable identity used for deduplication; each provider defines its normal form.
+    canonical_url: str
 
     @property
     def clone_url(self) -> str:
@@ -75,7 +73,14 @@ def parse_repository_url(raw: str) -> RepositoryLocator:
         raise ValidationError("Invalid repository owner")
     if not _GITHUB_REPO.match(name) or name in {".", ".."} or name.startswith("."):
         raise ValidationError("Invalid repository name")
-    return RepositoryLocator(provider=provider, host=host, owner=owner, name=name)
+    return RepositoryLocator(
+        provider=provider,
+        host=host,
+        owner=owner,
+        name=name,
+        # GitHub owner and repository names are case-insensitive.
+        canonical_url=f"https://{host}/{owner.lower()}/{name.lower()}",
+    )
 
 
 _HEX_REVISION = re.compile(r"^[0-9a-f]{7,64}$")

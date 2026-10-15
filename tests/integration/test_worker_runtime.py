@@ -17,13 +17,13 @@ from repolens.domain.enums import JobKind, JobStatus
 from repolens.persistence import jobs as queue
 from repolens.persistence.db import transaction
 from repolens.persistence.models import Job
-from repolens.worker.runtime import (
+from repolens.services.jobs import (
     JobContext,
     PermanentJobError,
     PolicyBlockedError,
     RetryableJobError,
-    Worker,
 )
+from repolens.worker.runtime import Worker
 
 pytestmark = pytest.mark.integration
 KIND = JobKind.ANALYZE_REPOSITORY
@@ -44,9 +44,10 @@ class FakeHandler:
         session: Session,
         job: queue.ClaimedJob | queue.RecoveredJob,
         status: JobStatus,
-        reason: str,
+        category: str,
+        detail: str | None,
     ) -> None:
-        self.failures.append((job.id, status, reason))
+        self.failures.append((job.id, status, category))
 
 
 def _job(factory: sessionmaker[Session], **kwargs: Any) -> uuid.UUID:

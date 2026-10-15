@@ -52,7 +52,7 @@ class GitHubProvider:
     """Public GitHub repositories, vetted with the unauthenticated REST API."""
 
     name = "github"
-    protocols = ("https",)
+    protocols: tuple[str, ...] = ("https",)
 
     def __init__(self, api_base: str = "https://api.github.com", timeout: float = 10.0) -> None:
         self.api_base = api_base
@@ -100,7 +100,7 @@ class LocalDirectoryProvider:
     """
 
     name = "local"
-    protocols = ("file",)
+    protocols: tuple[str, ...] = ("file",)
 
     def __init__(self, allowed_roots: list[Path]) -> None:
         self.allowed_roots = [root.resolve() for root in allowed_roots]
@@ -118,7 +118,11 @@ class LocalDirectoryProvider:
         if not any(resolved.is_relative_to(root) for root in self.allowed_roots):
             raise ValidationError("Local repository is outside the allowed directories")
         return RepositoryLocator(
-            provider=self.name, host="localhost", owner="local", name=str(resolved)
+            provider=self.name,
+            host="localhost",
+            owner="local",
+            name=str(resolved),
+            canonical_url=resolved.as_uri(),
         )
 
     def fetch_url(self, locator: RepositoryLocator) -> str:

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from repolens.observability.logging import get_logger
+from repolens.services.errors import ServiceError
 
 log = get_logger(__name__)
 
@@ -41,6 +42,12 @@ def error_body(request: Request, code: str, message: str, details: Any | None = 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:
+        return JSONResponse(
+            error_body(request, exc.code, exc.message, exc.details), status_code=exc.status_code
+        )
+
+    @app.exception_handler(ServiceError)
+    async def _service_error(request: Request, exc: ServiceError) -> JSONResponse:
         return JSONResponse(
             error_body(request, exc.code, exc.message, exc.details), status_code=exc.status_code
         )

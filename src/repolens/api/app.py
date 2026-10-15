@@ -12,10 +12,11 @@ from sqlalchemy import Engine
 import repolens
 from repolens.api.errors import install_error_handlers
 from repolens.api.middleware import request_context
-from repolens.api.routes import health
+from repolens.api.routes import analyses, health, repositories
 from repolens.config import Settings, get_settings
 from repolens.observability.logging import configure_logging
 from repolens.persistence.db import make_engine, make_session_factory
+from repolens.services.analysis import build_providers, default_analyzer
 
 
 def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
@@ -40,6 +41,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.state.settings = settings
     app.state.engine = db_engine
     app.state.session_factory = make_session_factory(db_engine)
+    app.state.providers = list(build_providers(settings).values())
+    app.state.parser_version = default_analyzer().version
 
     app.middleware("http")(request_context)
     app.add_middleware(
@@ -51,6 +54,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     )
     install_error_handlers(app)
     app.include_router(health.router, prefix="/api")
+    app.include_router(repositories.router, prefix="/api")
+    app.include_router(analyses.router, prefix="/api")
     return app
 
 

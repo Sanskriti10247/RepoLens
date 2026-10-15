@@ -114,6 +114,8 @@ class RepositorySnapshot(Base):
     total_bytes: Mapped[int | None] = mapped_column(BigInteger)
     language_inventory: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     inventory_sha256: Mapped[str | None] = mapped_column(Text)
+    # Snapshot-level findings (unsafe paths, unhashed files, submodules), capped in size.
+    inventory_issues: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created_at()
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -169,6 +171,8 @@ class AnalysisRun(Base):
         ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False
     )
     requested_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    resolved_ref: Mapped[str | None] = mapped_column(Text)  # e.g. refs/heads/main
+    resolved_ref_kind: Mapped[str | None] = mapped_column(Text)  # BRANCH | TAG | COMMIT
     # Unknown until the worker resolves the ref to a commit.
     snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("repository_snapshots.id", ondelete="CASCADE")

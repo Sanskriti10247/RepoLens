@@ -17,9 +17,8 @@ import threading
 import time
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Protocol
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -27,41 +26,19 @@ from repolens.domain.enums import JobKind, JobStatus
 from repolens.observability.logging import bind_context, clear_context, get_logger
 from repolens.persistence import jobs as queue
 from repolens.persistence.db import transaction
+from repolens.services.jobs import (
+    JobCancelled,
+    JobContext,
+    JobError,
+    JobHandler,
+    JobTimedOut,
+    LeaseLost,
+    PermanentJobError,
+    PolicyBlockedError,
+    RetryableJobError,
+)
 
 log = get_logger(__name__)
-
-
-class JobError(Exception):
-    category = "job_error"
-
-    def __init__(self, message: str, *, category: str | None = None) -> None:
-        super().__init__(message)
-        if category is not None:
-            self.category = category
-
-
-class RetryableJobError(JobError):
-    category = "infrastructure_error"
-
-
-class PermanentJobError(JobError):
-    category = "permanent_error"
-
-
-class PolicyBlockedError(JobError):
-    category = "policy_blocked"
-
-
-class JobCancelled(JobError):
-    category = "cancelled"
-
-
-class LeaseLost(JobError):
-    category = "lease_lost"
-
-
-class JobTimedOut(JobError):
-    category = "timed_out"
 
 
 # ``None`` means "lease lost: write nothing". QUEUED means "retry if attempts remain".
@@ -81,41 +58,6 @@ def _outcome_for(error: JobError) -> JobStatus | None:
         if cls in _OUTCOME_FOR_ERROR:
             return _OUTCOME_FOR_ERROR[cls]
     return JobStatus.FAILED
-
-
-@dataclass
-class JobContext:
-    job: queue.ClaimedJob
-    worker_id: str
-    session_factory: sessionmaker[Session]
-    deadline: float | None = None  # time.monotonic() value
-    cancel_event: threading.Event = field(default_factory=threading.Event)
-    lost_event: threading.Event = field(default_factory=threading.Event)
-
-    def checkpoint(self) -> None:
-        """Cooperative interruption point; handlers call this between units of work."""
-        if self.lost_event.is_set():
-            raise LeaseLost("job lease lost")
-        if self.cancel_event.is_set():
-            raise JobCancelled("cancellation requested")
-        if self.deadline is not None and time.monotonic() > self.deadline:
-            raise JobTimedOut("job exceeded its time limit")
-
-
-class JobHandler(Protocol):
-    timeout: timedelta | None
-
-    def run(self, ctx: JobContext) -> dict[str, Any] | None: ...
-
-    def on_terminal_failure(
-        self,
-        session: Session,
-        job: queue.ClaimedJob | queue.RecoveredJob,
-        status: JobStatus,
-        reason: str,
-    ) -> None:
-        """Bring the job's subject (e.g. an analysis run) into a matching terminal state."""
-        ...
 
 
 def default_worker_id() -> str:
@@ -167,7 +109,9 @@ class Worker:
                 log.warning("job_lease_expired", job_id=str(job.id), new_status=job.status)
                 handler = self.handlers.get(job.kind)
                 if job.status is not JobStatus.QUEUED and handler is not None:
-                    handler.on_terminal_failure(session, job, job.status, "lease_expired")
+                    handler.on_terminal_failure(
+                        session, job, job.status, "lease_expired", "worker stopped heartbeating"
+                    )
         return recovered
 
     def run_once(self) -> bool:
@@ -248,7 +192,9 @@ class Worker:
                     backoff=self.retry_backoff * job.attempts,
                 )
                 if new_status is JobStatus.FAILED:
-                    handler.on_terminal_failure(session, job, new_status, error.category)
+                    handler.on_terminal_failure(
+                        session, job, new_status, error.category, str(error)
+                    )
                 written = new_status is not None
                 final = new_status
             else:
@@ -263,7 +209,11 @@ class Worker:
                 )
                 if written and status is not JobStatus.SUCCEEDED:
                     handler.on_terminal_failure(
-                        session, job, status, error.category if error else status.value
+                        session,
+                        job,
+                        status,
+                        error.category if error else status.value,
+                        str(error) if error else None,
                     )
                 final = status
         if not written:
