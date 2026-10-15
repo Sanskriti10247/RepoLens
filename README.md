@@ -34,6 +34,7 @@ JSON requests.
 ### Checks
 
 ```bash
+./scripts/check.sh                   # everything below, stopping at the first failure
 uv run ruff format --check . && uv run ruff check . && uv run mypy && uv run lint-imports
 uv run pytest                        # unit + integration (integration needs the compose database)
 npm run web:check                    # lint, type check and tests for the web app
