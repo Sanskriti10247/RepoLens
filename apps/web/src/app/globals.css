@@ -1,0 +1,79 @@
+:root {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --border: #e3e3e8;
+  --text: #17171c;
+  --muted: #5f6070;
+  --accent: #3a5bd9;
+  --ok: #1f8a4c;
+  --warn: #b26b00;
+  --bad: #c0392b;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114;
+    --surface: #18181d;
+    --border: #2a2a32;
+    --text: #e8e8ee;
+    --muted: #9b9cab;
+    --accent: #7b96ff;
+    --ok: #4cc27f;
+    --warn: #e0a040;
+    --bad: #ef6b5b;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre { font-family: var(--mono); font-size: 12.5px; }
+h1 { font-size: 20px; margin: 0 0 12px; }
+h2 { font-size: 16px; margin: 20px 0 8px; }
+.muted { color: var(--muted); }
+
+.shell {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  grid-template-rows: 48px 1fr;
+  grid-template-areas: "top top" "side main";
+  min-height: 100vh;
+}
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 650; color: var(--text); letter-spacing: 0.2px; }
+.sidebar {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+.sidebar a { padding: 6px 10px; border-radius: 6px; color: var(--text); }
+.sidebar a:hover { background: var(--bg); text-decoration: none; }
+.content { grid-area: main; padding: 24px; min-width: 0; }
+
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status-ready .status-dot { background: var(--ok); }
+.status-degraded .status-dot { background: var(--warn); }
+.status-down .status-dot { background: var(--bad); }
+
+@media (max-width: 720px) {
+  .shell { grid-template-columns: 1fr; grid-template-areas: "top" "side" "main"; grid-template-rows: 48px auto 1fr; }
+  .sidebar { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .content { padding: 16px; }
+}
