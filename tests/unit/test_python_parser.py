@@ -382,3 +382,15 @@ def test_adapter_handles_python_paths_only() -> None:
     assert ADAPTER.handles("a/b.py") and ADAPTER.handles("stubs/x.pyi")
     assert not ADAPTER.handles("a/b.pyc") and not ADAPTER.handles("README.md")
     assert ADAPTER.version.startswith("python-ts")
+
+
+def test_fingerprint_ignores_the_definition_name() -> None:
+    first = parse("def compute(x):\n    return x + 1\n")
+    renamed = parse("def calculate(x):\n    return x + 1\n")
+    changed = parse("def compute(x):\n    return x + 2\n")
+
+    def fingerprint(parsed: ParsedFile) -> str | None:
+        return next(s for s in parsed.symbols if s.kind is SymbolKind.FUNCTION).body_fingerprint
+
+    assert fingerprint(first) == fingerprint(renamed)
+    assert fingerprint(first) != fingerprint(changed)

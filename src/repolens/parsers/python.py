@@ -33,7 +33,7 @@ from repolens.parsers.base import (
 )
 
 # Bump when extraction logic changes in a way that alters output for the same input.
-EXTRACTOR_REVISION = "1"
+EXTRACTOR_REVISION = "2"
 MAX_PROBLEMS = 50
 MAX_TEXT = 200
 DYNAMIC_CALLS = frozenset(
@@ -157,13 +157,18 @@ def _leaves(node: ts.Node) -> Iterator[ts.Node]:
             stack.extend(reversed(current.children))
 
 
-def _fingerprint(src: bytes, node: ts.Node) -> str:
-    """Hash of the token stream: insensitive to formatting and comments."""
+def _fingerprint(src: bytes, node: ts.Node, name: ts.Node | None = None) -> str:
+    """Hash of the token stream, insensitive to formatting and comments.
+
+    The definition's own name is excluded so that a pure rename keeps its fingerprint.
+    """
+    skip = (name.start_byte, name.end_byte) if name is not None else None
     digest = hashlib.sha256()
     for leaf in _leaves(node):
-        if leaf.type != "comment":
-            digest.update(src[leaf.start_byte : leaf.end_byte])
-            digest.update(b"\x1f")
+        if leaf.type == "comment" or (skip and (leaf.start_byte, leaf.end_byte) == skip):
+            continue
+        digest.update(src[leaf.start_byte : leaf.end_byte])
+        digest.update(b"\x1f")
     return digest.hexdigest()[:32]
 
 
@@ -306,7 +311,9 @@ class _Extractor:
                 parent_key=scope.key,
                 visibility=visibility_of(name),
                 signature=signature,
-                body_fingerprint=_fingerprint(self.source, outer),
+                body_fingerprint=_fingerprint(
+                    self.source, outer, definition.child_by_field_name("name")
+                ),
                 decorators=tuple(_short(_text(self.source, d))[1:] for d in decorators),
                 doc_summary=self._docstring(definition.child_by_field_name("body")),
                 is_test=is_test_class,
@@ -359,7 +366,9 @@ class _Extractor:
                 parent_key=scope.key,
                 visibility=visibility_of(name),
                 signature=signature,
-                body_fingerprint=_fingerprint(self.source, outer),
+                body_fingerprint=_fingerprint(
+                    self.source, outer, definition.child_by_field_name("name")
+                ),
                 decorators=tuple(_short(_text(self.source, d))[1:] for d in decorators),
                 doc_summary=self._docstring(definition.child_by_field_name("body")),
                 is_test=is_test,
