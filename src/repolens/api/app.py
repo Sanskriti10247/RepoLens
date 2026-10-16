@@ -42,7 +42,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.state.engine = db_engine
     app.state.session_factory = make_session_factory(db_engine)
     app.state.providers = list(build_providers(settings).values())
-    app.state.parser_version = default_analyzer().version
+    app.state.parser_version = default_analyzer(settings).version
 
     app.middleware("http")(request_context)
     app.add_middleware(

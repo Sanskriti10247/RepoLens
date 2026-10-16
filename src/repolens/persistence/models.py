@@ -247,6 +247,8 @@ class Symbol(Base):
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     doc_summary: Mapped[str | None] = mapped_column(Text)
+    is_test: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    has_parse_errors: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
 
 
 class SymbolReference(Base):

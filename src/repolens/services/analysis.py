@@ -20,10 +20,10 @@ import shutil
 import time
 import uuid
 from collections import Counter
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -61,6 +61,7 @@ from repolens.repository.validation import ValidationError, validate_ref
 from repolens.services.errors import Conflict, InvalidInput, NotFound
 from repolens.services.jobs import JobContext, PermanentJobError, RetryableJobError
 from repolens.services.repositories import get_repository
+from repolens.services.snapshots import SnapshotAnalyzer, SnapshotFile
 
 log = get_logger(__name__)
 
@@ -75,55 +76,11 @@ _TERMINAL_RUN = {
 }
 
 
-# -- analyzer contract (implemented by the code-intelligence modules) ---------------------
-
-
-@dataclass(frozen=True, slots=True)
-class SnapshotFile:
-    id: int
-    path: str
-    blob_sha: str
-    size_bytes: int
-    language: str | None
-    role: str
-    mode: str
-    is_binary: bool
-
-
-class SnapshotAnalyzer(Protocol):
-    """Turns a snapshot into analysis results inside the caller's transaction."""
-
-    version: str
-
-    def analyze(
-        self,
-        session: Session,
-        run: AnalysisRun,
-        files: list[SnapshotFile],
-        read_blob: Any,
-        ctx: JobContext,
-    ) -> dict[str, Any]:
-        """Persist results for ``run`` and return counts. Must be deterministic."""
-        ...
-
-
-class NoAnalyzer:
-    version = "none"
-
-    def analyze(
-        self,
-        session: Session,
-        run: AnalysisRun,
-        files: list[SnapshotFile],
-        read_blob: Any,
-        ctx: JobContext,
-    ) -> dict[str, Any]:
-        return {}
-
-
-def default_analyzer() -> SnapshotAnalyzer:
+def default_analyzer(settings: Settings) -> SnapshotAnalyzer:
     """The analyzer used by workers; its version is part of every analysis key."""
-    return NoAnalyzer()
+    from repolens.services.code_analysis import PythonSnapshotAnalyzer  # noqa: PLC0415
+
+    return PythonSnapshotAnalyzer(max_file_bytes=settings.max_indexed_file_bytes)
 
 
 # -- configuration ------------------------------------------------------------------------
@@ -148,7 +105,7 @@ class IngestionDeps:
     providers: dict[str, RepositoryProvider]
     runner: GitRunner
     mirrors: MirrorStore
-    analyzer: SnapshotAnalyzer = field(default_factory=NoAnalyzer)
+    analyzer: SnapshotAnalyzer
 
     @property
     def provider_list(self) -> list[RepositoryProvider]:
@@ -176,7 +133,7 @@ def build_ingestion_deps(
         providers=providers,
         runner=runner,
         mirrors=MirrorStore(settings.mirrors_dir, runner),
-        analyzer=analyzer or default_analyzer(),
+        analyzer=analyzer or default_analyzer(settings),
     )
 
 
@@ -525,7 +482,7 @@ class AnalyzeRepositoryHandler:
                 counts = {"files": len(files), **counts}
                 run.status = (
                     AnalysisStatus.PARTIAL
-                    if counts.get("files_failed", 0)
+                    if counts.get("incomplete_files", 0)
                     else AnalysisStatus.SUCCEEDED
                 )
                 run.counts = counts
