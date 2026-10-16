@@ -12,7 +12,7 @@ from sqlalchemy import Engine
 import repolens
 from repolens.api.errors import install_error_handlers
 from repolens.api.middleware import request_context
-from repolens.api.routes import analyses, graph, health, repositories
+from repolens.api.routes import analyses, graph, health, impact, repositories
 from repolens.config import Settings, get_settings
 from repolens.observability.logging import configure_logging
 from repolens.persistence.db import make_engine, make_session_factory
@@ -63,6 +63,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(repositories.router, prefix="/api")
     app.include_router(analyses.router, prefix="/api")
     app.include_router(graph.router, prefix="/api")
+    app.include_router(impact.router, prefix="/api")
     return app
 
 

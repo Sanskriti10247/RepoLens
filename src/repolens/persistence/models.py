@@ -34,6 +34,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from repolens.domain.enums import (
     AnalysisStatus,
+    ChangeMappingStatus,
+    ChangeSetStatus,
     Confidence,
     EdgeType,
     FileAnalysisStatus,
@@ -409,3 +411,112 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class ChangeSet(Base):
+    """A comparison between two revisions of a repository (the subject of impact analysis)."""
+
+    __tablename__ = "change_sets"
+    __table_args__ = (
+        enum_check("status", ChangeSetStatus),
+        CheckConstraint(f"base_sha IS NULL OR base_sha {SHA_CHECK}", name="base_sha_format"),
+        CheckConstraint(f"target_sha IS NULL OR target_sha {SHA_CHECK}", name="target_sha_format"),
+        Index(None, "repository_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    repository_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False
+    )
+    base_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    target_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    base_sha: Mapped[str | None] = mapped_column(Text)
+    target_sha: Mapped[str | None] = mapped_column(Text)
+    base_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="SET NULL")
+    )
+    target_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=ChangeSetStatus.QUEUED)
+    diff_algorithm: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    timings_ms: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created_at()
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ChangedFile(Base):
+    __tablename__ = "changed_files"
+    __table_args__ = (
+        enum_check("mapping_status", ChangeMappingStatus),
+        CheckConstraint(
+            "change_type IN ('ADDED', 'MODIFIED', 'DELETED', 'RENAMED', 'COPIED', 'TYPE_CHANGED')",
+            name="change_type_valid",
+        ),
+        CheckConstraint("old_path IS NOT NULL OR new_path IS NOT NULL", name="has_path"),
+        Index(None, "change_set_id"),
+    )
+
+    id: Mapped[int] = _bigint_pk()
+    change_set_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("change_sets.id", ondelete="CASCADE"), nullable=False
+    )
+    change_type: Mapped[str] = mapped_column(Text, nullable=False)
+    old_path: Mapped[str | None] = mapped_column(Text)
+    new_path: Mapped[str | None] = mapped_column(Text)
+    old_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("source_files.id", ondelete="SET NULL")
+    )
+    new_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("source_files.id", ondelete="SET NULL")
+    )
+    language: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str | None] = mapped_column(Text)
+    mapping_status: Mapped[str] = mapped_column(Text, nullable=False)
+    similarity: Mapped[int | None] = mapped_column(Integer)
+    added_lines: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deleted_lines: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    old_ranges: Mapped[list[list[int]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    new_ranges: Mapped[list[list[int]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+
+
+class ChangedSymbol(Base):
+    __tablename__ = "changed_symbols"
+    __table_args__ = (
+        CheckConstraint(
+            "change_kind IN ('ADDED', 'REMOVED', 'MODIFIED', 'RENAMED')", name="change_kind_valid"
+        ),
+        CheckConstraint(
+            "base_symbol_id IS NOT NULL OR target_symbol_id IS NOT NULL", name="has_symbol"
+        ),
+        Index(None, "change_set_id"),
+    )
+
+    id: Mapped[int] = _bigint_pk()
+    change_set_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("change_sets.id", ondelete="CASCADE"), nullable=False
+    )
+    changed_file_id: Mapped[int] = mapped_column(
+        ForeignKey("changed_files.id", ondelete="CASCADE"), nullable=False
+    )
+    change_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    symbol_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    qualified_name: Mapped[str] = mapped_column(Text, nullable=False)
+    base_symbol_id: Mapped[int | None] = mapped_column(
+        ForeignKey("symbols.id", ondelete="SET NULL")
+    )
+    target_symbol_id: Mapped[int | None] = mapped_column(
+        ForeignKey("symbols.id", ondelete="SET NULL")
+    )
+    signature_changed: Mapped[bool] = mapped_column(nullable=False, default=False)
+    body_changed: Mapped[bool] = mapped_column(nullable=False, default=False)
+    decorators_changed: Mapped[bool] = mapped_column(nullable=False, default=False)
+    bases_changed: Mapped[bool] = mapped_column(nullable=False, default=False)
+    changed_lines: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

@@ -294,3 +294,78 @@ class SourceOut(Schema):
     commit_sha: str
     blob_sha: str
     content: str
+
+
+# -- change and impact analysis -------------------------------------------------------------
+
+
+class ImpactCreate(BaseModel):
+    base: str = Field(max_length=255, examples=["main", "v1.0.0", "3f2a9c1"])
+    target: str = Field(max_length=255, examples=["feature/login", "HEAD"])
+
+
+class ChangeSetOut(Schema):
+    id: uuid.UUID
+    repository_id: uuid.UUID
+    status: str
+    base_ref: str
+    target_ref: str
+    base_sha: str | None
+    target_sha: str | None
+    base_run_id: uuid.UUID | None
+    target_run_id: uuid.UUID | None
+    diff_algorithm: str | None
+    summary: dict[str, Any] | None
+    timings_ms: dict[str, Any] | None
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    job: JobOut | None = None
+
+
+class ChangeSetPage(Schema):
+    items: list[ChangeSetOut]
+    page: PageMeta
+
+
+class ChangedFileOut(Schema):
+    id: int
+    change_type: str
+    old_path: str | None
+    new_path: str | None
+    old_file_id: int | None
+    new_file_id: int | None
+    language: str | None
+    role: str | None
+    mapping_status: str
+    similarity: int | None
+    added_lines: int
+    deleted_lines: int
+    old_ranges: list[list[int]]
+    new_ranges: list[list[int]]
+
+
+class ChangedFilePage(Schema):
+    items: list[ChangedFileOut]
+    page: PageMeta
+
+
+class ChangedSymbolOut(Schema):
+    id: int
+    changed_file_id: int
+    change_kind: str
+    symbol_kind: str
+    qualified_name: str
+    base_symbol_id: int | None
+    target_symbol_id: int | None
+    signature_changed: bool
+    body_changed: bool
+    decorators_changed: bool
+    bases_changed: bool
+    changed_lines: int
+
+
+class ChangedSymbolPage(Schema):
+    items: list[ChangedSymbolOut]
+    page: PageMeta

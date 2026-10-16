@@ -244,10 +244,7 @@ class AnalyzeRepositoryHandler:
 
     def __init__(self, deps: IngestionDeps) -> None:
         self.deps = deps
-
-    @property
-    def settings(self) -> Settings:
-        return self.deps.settings
+        self.pipeline = AnalysisPipeline(deps)
 
     def on_terminal_failure(
         self,
@@ -291,12 +288,13 @@ class AnalyzeRepositoryHandler:
             )
 
         with _timed(timings, "fetch_ms"):
-            mirror, resolved, default_branch = self._fetch_and_resolve(
-                ctx, repo_id, provider_name, canonical, ref
+            mirror, default_branch = self.pipeline.prepare_mirror(
+                ctx, repo_id, provider_name, canonical
             )
+            resolved = self.pipeline.resolve(mirror, ref, default_branch)
         ctx.checkpoint()
         with _timed(timings, "snapshot_ms"):
-            snapshot_id = self._ensure_snapshot(ctx, repo_id, mirror, resolved)
+            snapshot_id = self.pipeline.ensure_snapshot(ctx, repo_id, mirror, resolved)
 
         with transaction(factory) as session:
             run = session.get(AnalysisRun, run_id, with_for_update=True)
@@ -316,7 +314,7 @@ class AnalyzeRepositoryHandler:
                 return {"reused_run_id": str(reusable), "commit_sha": resolved.commit_sha}
 
         ctx.checkpoint()
-        return self._analyze(
+        return self.pipeline.analyze_run(
             ctx,
             run_id=run_id,
             snapshot_id=snapshot_id,
@@ -325,7 +323,12 @@ class AnalyzeRepositoryHandler:
             timings=timings,
         )
 
-    # -- steps ----------------------------------------------------------------------------
+
+class AnalysisPipeline:
+    """Reusable ingestion and analysis steps, shared by analysis and change-analysis jobs."""
+
+    def __init__(self, deps: IngestionDeps) -> None:
+        self.deps = deps
 
     def _provider(self, name: str) -> RepositoryProvider:
         provider = self.deps.providers.get(name)
@@ -335,16 +338,16 @@ class AnalyzeRepositoryHandler:
             )
         return provider
 
-    def _fetch_and_resolve(
+    def prepare_mirror(
         self,
         ctx: JobContext,
         repo_id: uuid.UUID,
         provider_name: str,
         canonical_url: str,
-        ref: str,
-    ) -> tuple[Path, ResolvedRevision, str | None]:
+    ) -> tuple[Path, str | None]:
+        """Vet the repository with its provider, then create or update its bare mirror."""
         provider = self._provider(provider_name)
-        settings = self.settings
+        settings = self.deps.settings
         locator = provider.locate(canonical_url)
         try:
             meta = provider.preflight(locator)
@@ -373,14 +376,15 @@ class AnalyzeRepositoryHandler:
         except MirrorError as exc:
             error_type = RetryableJobError if exc.retryable else PermanentJobError
             raise error_type(str(exc), category="fetch_failed") from exc
-        default_branch = meta.default_branch or self.deps.mirrors.default_branch(mirror)
+        return mirror, meta.default_branch or self.deps.mirrors.default_branch(mirror)
+
+    def resolve(self, mirror: Path, ref: str, default_branch: str | None) -> ResolvedRevision:
         try:
-            resolved = self.deps.mirrors.resolve(mirror, ref, default_branch=default_branch)
+            return self.deps.mirrors.resolve(mirror, ref, default_branch=default_branch)
         except (RevisionNotFound, RevisionAmbiguous) as exc:
             raise PermanentJobError(str(exc), category="revision_not_resolved") from exc
-        return mirror, resolved, default_branch
 
-    def _ensure_snapshot(
+    def ensure_snapshot(
         self, ctx: JobContext, repo_id: uuid.UUID, mirror: Path, resolved: ResolvedRevision
     ) -> uuid.UUID:
         factory = ctx.session_factory
@@ -389,7 +393,7 @@ class AnalyzeRepositoryHandler:
         if existing is not None:
             return existing
 
-        settings = self.settings
+        settings = self.deps.settings
         try:
             info = self.deps.mirrors.commit_info(mirror, resolved.commit_sha)
             inventory = build_inventory(
@@ -458,7 +462,7 @@ class AnalyzeRepositoryHandler:
         )
         return snapshot_id
 
-    def _analyze(
+    def analyze_run(
         self,
         ctx: JobContext,
         *,
@@ -500,6 +504,59 @@ class AnalyzeRepositoryHandler:
                 _mark_reused(run, reusable)
                 return {"reused_run_id": str(reusable), "commit_sha": resolved.commit_sha}
         return {"commit_sha": resolved.commit_sha, "counts": counts, "timings_ms": timings}
+
+    def ensure_analysis(
+        self,
+        ctx: JobContext,
+        repo_id: uuid.UUID,
+        mirror: Path,
+        resolved: ResolvedRevision,
+    ) -> uuid.UUID:
+        """Return a run with usable results for this commit, analysing it if necessary."""
+        snapshot_id = self.ensure_snapshot(ctx, repo_id, mirror, resolved)
+        config = analysis_config(self.deps.settings).fingerprint()
+        version = self.deps.analyzer.version
+        with transaction(ctx.session_factory) as session:
+            existing = session.execute(
+                select(AnalysisRun.id)
+                .where(
+                    AnalysisRun.snapshot_id == snapshot_id,
+                    AnalysisRun.parser_version == version,
+                    AnalysisRun.engine_version == ENGINE_VERSION,
+                    AnalysisRun.config_fingerprint == config,
+                    AnalysisRun.status.in_(
+                        [AnalysisStatus.SUCCEEDED.value, AnalysisStatus.PARTIAL.value]
+                    ),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if existing is not None:
+                return existing
+            run = AnalysisRun(
+                id=uuid.uuid4(),
+                repository_id=repo_id,
+                requested_ref=resolved.commit_sha,
+                resolved_ref=resolved.full_ref,
+                resolved_ref_kind=resolved.kind.value,
+                snapshot_id=snapshot_id,
+                status=AnalysisStatus.RUNNING,
+                parser_version=version,
+                engine_version=ENGINE_VERSION,
+                config_fingerprint=config,
+                started_at=func.now(),
+            )
+            session.add(run)
+            run_id = run.id
+        result = self.analyze_run(
+            ctx,
+            run_id=run_id,
+            snapshot_id=snapshot_id,
+            mirror=mirror,
+            resolved=resolved,
+            timings={},
+        )
+        reused = result.get("reused_run_id")
+        return uuid.UUID(reused) if reused else run_id
 
 
 def load_snapshot_files(session: Session, snapshot_id: uuid.UUID) -> list[SnapshotFile]:

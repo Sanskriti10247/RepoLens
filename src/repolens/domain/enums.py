@@ -115,6 +115,26 @@ class Severity(StrEnum):
 
 class JobKind(StrEnum):
     ANALYZE_REPOSITORY = "ANALYZE_REPOSITORY"
+    ANALYZE_CHANGE = "ANALYZE_CHANGE"
+
+
+class ChangeSetStatus(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ChangeMappingStatus(StrEnum):
+    """How completely a changed file could be mapped to symbols."""
+
+    MAPPED = "MAPPED"
+    MAPPED_WITH_PARSE_ERRORS = "MAPPED_WITH_PARSE_ERRORS"
+    NOT_ANALYZED = "NOT_ANALYZED"  # Python, but skipped (too large, encoding, failure)
+    NON_PYTHON = "NON_PYTHON"  # configuration, documentation, other languages
+    BINARY = "BINARY"
+    SPECIAL = "SPECIAL"  # symlinks and submodules
 
 
 class JobStatus(StrEnum):
