@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -410,4 +410,71 @@ class ImpactItemOut(Schema):
 
 class ImpactItemPage(Schema):
     items: list[ImpactItemOut]
+    page: PageMeta
+
+
+# -- test plans ------------------------------------------------------------------------------
+
+
+class TestPlanCreate(BaseModel):
+    __test__ = False
+
+    policy: Literal["CONSERVATIVE", "BUDGETED"] = "CONSERVATIVE"
+    max_tests: int | None = Field(default=None, ge=1, le=100_000)
+    max_seconds: float | None = Field(default=None, gt=0, le=86_400)
+
+
+class TestPlanOut(Schema):
+    __test__ = False
+
+    id: uuid.UUID
+    change_set_id: uuid.UUID
+    analysis_run_id: uuid.UUID
+    policy: str
+    budget: dict[str, Any] | None
+    scope: str
+    fallback_reason: str | None
+    total_tests: int
+    selected_tests: int
+    estimated_seconds: float | None
+    budget_limited: bool
+    evidence_sources: dict[str, Any]
+    created_at: datetime
+
+
+class TestPlanItemOut(Schema):
+    __test__ = False
+
+    id: int
+    node_id: str
+    selected: bool
+    rank: int
+    score: int
+    evidence: list[dict[str, Any]]
+    exclusion_reason: str | None
+    estimated_seconds: float | None
+
+
+class TestPlanItemPage(Schema):
+    __test__ = False
+
+    items: list[TestPlanItemOut]
+    page: PageMeta
+
+
+class TestCaseOut(Schema):
+    __test__ = False
+
+    id: int
+    node_id: str
+    path: str
+    qualified_name: str
+    symbol_id: int | None
+    collection_status: str
+
+
+class TestCasePage(Schema):
+    __test__ = False
+
+    items: list[TestCaseOut]
     page: PageMeta

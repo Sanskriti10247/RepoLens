@@ -2,47 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-
 import pytest
 from fastapi.testclient import TestClient
 
 from repolens.worker.runtime import Worker
-from tests.integration.conftest import AUTH, register
+from tests.integration.conftest import run_impact
 from tests.support import projects
 from tests.support.gitrepo import FixtureRepo
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def inventory(tmp_path: Path) -> FixtureRepo:
-    repo = FixtureRepo(tmp_path / "repos" / "inventory")
-    repo.commit("base", projects.INVENTORY)
-    repo.tag("base")
-    return repo
-
-
-def run_impact(
-    client: TestClient, worker: Worker, repo: FixtureRepo, change: dict[str, str]
-) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    repo.git("checkout", "-q", "-B", "change", "base")
-    repo.commit("change", change)
-    repo_id = register(client, repo.url)["id"]
-    response = client.post(
-        f"/api/repositories/{repo_id}/impact",
-        json={"base": "base", "target": "change"},
-        headers=AUTH,
-    )
-    assert response.status_code == 202, response.text
-    impact_id = response.json()["id"]
-    assert worker.run_once()
-    status = client.get(f"/api/impact/{impact_id}").json()
-    assert status["status"] == "SUCCEEDED", status
-    report = client.get(f"/api/impact/{impact_id}/report").json()
-    items = client.get(f"/api/impact/{impact_id}/items", params={"limit": 100}).json()["items"]
-    return report, {i["qualified_name"]: i for i in items}
 
 
 def test_function_body_change(client: TestClient, worker: Worker, inventory: FixtureRepo) -> None:

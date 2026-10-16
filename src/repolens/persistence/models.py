@@ -589,3 +589,80 @@ class ImpactItem(Base):
     seed_reason: Mapped[str] = mapped_column(Text, nullable=False)
     graph: Mapped[str] = mapped_column(Text, nullable=False)  # TARGET or BASE
     explanation: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+
+
+class TestCaseRecord(Base):
+    """A test in an analysed snapshot. Static discovery first; sandboxed collection updates it."""
+
+    __test__ = False
+    __tablename__ = "test_cases"
+    __table_args__ = (
+        UniqueConstraint("analysis_run_id", "node_id"),
+        CheckConstraint(
+            "collection_status IN ('STATIC', 'COLLECTED', 'NOT_COLLECTED', 'COLLECTION_ERROR')",
+            name="collection_status_valid",
+        ),
+    )
+
+    id: Mapped[int] = _bigint_pk()
+    analysis_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol_id: Mapped[int | None] = mapped_column(ForeignKey("symbols.id", ondelete="SET NULL"))
+    node_id: Mapped[str] = mapped_column(Text, nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    qualified_name: Mapped[str] = mapped_column(Text, nullable=False)
+    collection_status: Mapped[str] = mapped_column(Text, nullable=False, default="STATIC")
+    created_at: Mapped[datetime] = _created_at()
+
+
+class TestPlan(Base):
+    __test__ = False
+    __tablename__ = "test_plans"
+    __table_args__ = (
+        CheckConstraint("policy IN ('CONSERVATIVE', 'BUDGETED')", name="policy_valid"),
+        CheckConstraint("scope IN ('NONE', 'TARGETED', 'BROAD', 'FULL_SUITE')", name="scope_valid"),
+        Index(None, "change_set_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    change_set_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("change_sets.id", ondelete="CASCADE"), nullable=False
+    )
+    analysis_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    policy: Mapped[str] = mapped_column(Text, nullable=False)
+    budget: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    fallback_reason: Mapped[str | None] = mapped_column(Text)
+    total_tests: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_tests: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_seconds: Mapped[float | None] = mapped_column(Float)
+    budget_limited: Mapped[bool] = mapped_column(nullable=False, default=False)
+    evidence_sources: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class TestPlanItem(Base):
+    __test__ = False
+    __tablename__ = "test_plan_items"
+    __table_args__ = (
+        UniqueConstraint("plan_id", "node_id"),
+        Index(None, "plan_id", "selected", "rank"),
+    )
+
+    id: Mapped[int] = _bigint_pk()
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    test_case_id: Mapped[int | None] = mapped_column(
+        ForeignKey("test_cases.id", ondelete="SET NULL")
+    )
+    node_id: Mapped[str] = mapped_column(Text, nullable=False)
+    selected: Mapped[bool] = mapped_column(nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    exclusion_reason: Mapped[str | None] = mapped_column(Text)
+    estimated_seconds: Mapped[float | None] = mapped_column(Float)

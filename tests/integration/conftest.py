@@ -17,6 +17,8 @@ from repolens.api.app import create_app
 from repolens.config import Settings
 from repolens.worker.handlers import build_handlers
 from repolens.worker.runtime import Worker
+from tests.support import projects
+from tests.support.gitrepo import FixtureRepo
 
 TOKEN = "integration-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -63,3 +65,40 @@ def analyze(client: TestClient, repo_id: str, ref: str = "HEAD") -> dict[str, An
     response = client.post(f"/api/repositories/{repo_id}/analyses", json={"ref": ref}, headers=AUTH)
     assert response.status_code == 202, response.text
     return response.json()  # type: ignore[no-any-return]
+
+
+@pytest.fixture
+def inventory(tmp_path: Path) -> FixtureRepo:
+    repo = FixtureRepo(tmp_path / "repos" / "inventory")
+    repo.commit("base", projects.INVENTORY)
+    repo.tag("base")
+    return repo
+
+
+def run_change(
+    client: TestClient, worker: Worker, repo: FixtureRepo, change: dict[str, str]
+) -> str:
+    """Commit ``change`` on a branch from ``base`` and run a completed impact analysis."""
+    repo.git("checkout", "-q", "-B", "change", "base")
+    repo.commit("change", change)
+    repo_id = register(client, repo.url)["id"]
+    response = client.post(
+        f"/api/repositories/{repo_id}/impact",
+        json={"base": "base", "target": "change"},
+        headers=AUTH,
+    )
+    assert response.status_code == 202, response.text
+    impact_id: str = response.json()["id"]
+    assert worker.run_once()
+    status = client.get(f"/api/impact/{impact_id}").json()
+    assert status["status"] == "SUCCEEDED", status
+    return impact_id
+
+
+def run_impact(
+    client: TestClient, worker: Worker, repo: FixtureRepo, change: dict[str, str]
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    impact_id = run_change(client, worker, repo, change)
+    report = client.get(f"/api/impact/{impact_id}/report").json()
+    items = client.get(f"/api/impact/{impact_id}/items", params={"limit": 100}).json()["items"]
+    return report, {i["qualified_name"]: i for i in items}

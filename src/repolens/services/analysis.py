@@ -62,6 +62,7 @@ from repolens.services.errors import Conflict, InvalidInput, NotFound
 from repolens.services.jobs import JobContext, PermanentJobError, RetryableJobError
 from repolens.services.repositories import get_repository
 from repolens.services.snapshots import SnapshotAnalyzer, SnapshotFile
+from repolens.services.test_planning import ensure_test_catalog
 
 log = get_logger(__name__)
 
@@ -481,9 +482,11 @@ class AnalysisPipeline:
                 assert run is not None  # noqa: S101
                 started = time.perf_counter()
                 counts = self.deps.analyzer.analyze(session, run, files, reader.read, ctx)
+                session.flush()
+                tests = ensure_test_catalog(session, run.id)
                 timings["analyze_ms"] = round((time.perf_counter() - started) * 1000, 1)
                 ctx.checkpoint()
-                counts = {"files": len(files), **counts}
+                counts = {"files": len(files), **counts, "tests_discovered": len(tests)}
                 run.status = (
                     AnalysisStatus.PARTIAL
                     if counts.get("incomplete_files", 0)
