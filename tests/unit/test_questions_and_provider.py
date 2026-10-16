@@ -139,3 +139,15 @@ def test_provider_failures_degrade(messages: FakeMessages) -> None:
 def test_missing_sdk_or_evidence_is_unavailable() -> None:
     with pytest.raises(ProviderUnavailable):
         provider(FakeMessages()).explain("q", [])
+
+
+def test_provider_refuses_instead_of_waiting_when_rate_limited() -> None:
+    body = {"explanation": "g calls f [E2].", "cited_evidence": ["E2"], "evidence_sufficient": True}
+    messages = FakeMessages(response(json.dumps(body)))
+    p = provider(messages)
+    p.min_interval = 60.0
+    evidence = [{"id": "E2", "category": "STATIC_RELATIONSHIP", "statement": "g calls f"}]
+    p.explain("who calls f?", evidence)
+    with pytest.raises(ProviderUnavailable, match="rate limit"):
+        p.explain("who calls f?", evidence)
+    assert len(messages.calls) == 1

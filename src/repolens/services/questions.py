@@ -338,8 +338,9 @@ class QuestionService:
         builder.add(
             Category.SOURCE_FACT,
             f"`{symbol.qualified_name}` is a {kind} defined in `{symbol.path}` "
-            f"lines {symbol.start_line}-{_last_line(symbol)}"
-            + (f": {symbol.doc_summary}" if symbol.doc_summary else ""),
+            # The docstring is repository text: it reaches a model only inside ``text``,
+            # which the source-upload policy controls.
+            f"lines {symbol.start_line}-{_last_line(symbol)}",
             path=symbol.path,
             start_line=symbol.start_line,
             end_line=_last_line(symbol),

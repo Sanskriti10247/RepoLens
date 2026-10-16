@@ -134,11 +134,13 @@ class AnthropicProvider:
         return self._client
 
     def _throttle(self) -> None:
+        # Refuse rather than wait: sleeping here would hold a request thread for every caller
+        # queued behind the lock. The caller falls back to the deterministic answer.
         with self._lock:
-            wait = self._last_call + self.min_interval - time.monotonic()
-            if wait > 0:
-                time.sleep(wait)
-            self._last_call = time.monotonic()
+            now = time.monotonic()
+            if now < self._last_call + self.min_interval:
+                raise ProviderUnavailable("model rate limit reached; try again shortly")
+            self._last_call = now
 
     def explain(self, question: str, evidence: list[dict[str, Any]]) -> ModelAnswer:
         prepared = prepare_evidence(

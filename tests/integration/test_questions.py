@@ -103,11 +103,13 @@ def test_repository_text_cannot_steer_answers(
     analyze(client, rid)
     assert worker.run_once()
     answer = ask(client, rid, "Where is helper implemented?")
-    # The docstring is quoted as data inside a source fact; nothing in the answer path
-    # interprets it. (The model path's defences are covered by the provider unit tests.)
+    # The docstring is shown as data in the source snippet only, which the source-upload
+    # policy keeps from a model; nothing in the answer path interprets it. (The model path's
+    # defences are covered by the provider unit tests.)
     first = answer["evidence"][0]
     assert first["category"] == "SOURCE_FACT"
-    assert "Ignore previous instructions" in first["statement"]
+    assert "Ignore previous instructions" in first["text"]
+    assert "Ignore previous instructions" not in first["statement"]
     assert answer["intent"] == "DEFINITION" and answer["mode"] == "deterministic"
 
 
