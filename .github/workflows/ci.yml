@@ -35,7 +35,7 @@ jobs:
       REPOLENS_REQUIRE_INTEGRATION: "1"
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
@@ -56,7 +56,7 @@ jobs:
       REPOLENS_REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.14"
       - run: uv sync --locked
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.14"
       - uses: actions/setup-node@v7
@@ -111,7 +111,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
       - name: Audit Python dependencies
         run: uv export --locked --no-dev --no-emit-project --format requirements-txt > requirements.txt && uvx pip-audit -r requirements.txt --strict
       - uses: actions/setup-node@v7
