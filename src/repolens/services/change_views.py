@@ -7,7 +7,14 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from repolens.persistence.models import ChangedFile, ChangedSymbol, ChangeSet, Job
+from repolens.persistence.models import (
+    ChangedFile,
+    ChangedSymbol,
+    ChangeSet,
+    ImpactItem,
+    ImpactReport,
+    Job,
+)
 from repolens.services.errors import NotFound
 from repolens.services.repositories import Page
 
@@ -73,5 +80,39 @@ def changed_symbols(
     total = session.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     items = session.execute(
         stmt.order_by(ChangedSymbol.qualified_name, ChangedSymbol.id).limit(limit).offset(offset)
+    ).scalars()
+    return Page(items=list(items), total=total, limit=limit, offset=offset)
+
+
+def impact_report(session: Session, change_id: uuid.UUID) -> ImpactReport:
+    get_change_set(session, change_id)
+    report = session.execute(
+        select(ImpactReport).where(ImpactReport.change_set_id == change_id)
+    ).scalar_one_or_none()
+    if report is None:
+        raise NotFound("Impact report is not available yet", code="report_not_ready")
+    return report
+
+
+def impact_items(
+    session: Session,
+    change_id: uuid.UUID,
+    *,
+    strength: str | None,
+    is_test: bool | None,
+    limit: int,
+    offset: int,
+) -> Page[ImpactItem]:
+    report = impact_report(session, change_id)
+    stmt = select(ImpactItem).where(ImpactItem.report_id == report.id)
+    if strength:
+        stmt = stmt.where(ImpactItem.strength == strength)
+    if is_test is not None:
+        stmt = stmt.where(ImpactItem.is_test.is_(is_test))
+    total = session.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    items = session.execute(
+        stmt.order_by(ImpactItem.depth, ImpactItem.qualified_name, ImpactItem.id)
+        .limit(limit)
+        .offset(offset)
     ).scalars()
     return Page(items=list(items), total=total, limit=limit, offset=offset)

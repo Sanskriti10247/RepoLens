@@ -207,6 +207,7 @@ class AnalyzeChangeHandler:
                 change,
                 max_file_bytes=self.deps.settings.max_indexed_file_bytes,
             )
+            change.summary = summary  # later stages read it (e.g. "too_large")
         timings["diff_ms"] = _ms(started)
 
         for stage in self.stages:

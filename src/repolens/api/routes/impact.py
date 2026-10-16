@@ -16,6 +16,9 @@ from repolens.api.schemas import (
     ChangeSetOut,
     ChangeSetPage,
     ImpactCreate,
+    ImpactItemOut,
+    ImpactItemPage,
+    ImpactReportOut,
     JobOut,
     PageMeta,
 )
@@ -94,5 +97,29 @@ def impact_changed_symbols(
     )
     return ChangedSymbolPage(
         items=[ChangedSymbolOut.model_validate(s) for s in result.items],
+        page=PageMeta(total=result.total, limit=result.limit, offset=result.offset),
+    )
+
+
+@router.get("/impact/{impact_id}/report", response_model=ImpactReportOut)
+def impact_report(impact_id: uuid.UUID, session: SessionDep) -> ImpactReportOut:
+    """Risk factors, completeness, uncertainty and the recommended verification scope."""
+    return ImpactReportOut.model_validate(change_views.impact_report(session, impact_id))
+
+
+@router.get("/impact/{impact_id}/items", response_model=ImpactItemPage)
+def impact_items(
+    impact_id: uuid.UUID,
+    session: SessionDep,
+    page: Pagination,
+    strength: str | None = None,
+    is_test: bool | None = None,
+) -> ImpactItemPage:
+    """Changed and impacted symbols, each with the dependency path explaining it."""
+    result = change_views.impact_items(
+        session, impact_id, strength=strength, is_test=is_test, limit=page.limit, offset=page.offset
+    )
+    return ImpactItemPage(
+        items=[ImpactItemOut.model_validate(i) for i in result.items],
         page=PageMeta(total=result.total, limit=result.limit, offset=result.offset),
     )

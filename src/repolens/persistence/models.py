@@ -520,3 +520,72 @@ class ChangedSymbol(Base):
     decorators_changed: Mapped[bool] = mapped_column(nullable=False, default=False)
     bases_changed: Mapped[bool] = mapped_column(nullable=False, default=False)
     changed_lines: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ImpactReport(Base):
+    """Evidence-backed impact of a change set (one per change set)."""
+
+    __tablename__ = "impact_reports"
+    __table_args__ = (
+        CheckConstraint(
+            "completeness IN ('COMPLETE', 'PARTIAL', 'UNKNOWN')", name="completeness_valid"
+        ),
+        CheckConstraint("risk_level IN ('LOW', 'MEDIUM', 'HIGH')", name="risk_level_valid"),
+        CheckConstraint(
+            "recommended_scope IN ('NONE', 'TARGETED', 'BROAD', 'FULL_SUITE')",
+            name="recommended_scope_valid",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    change_set_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("change_sets.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    engine_version: Mapped[str] = mapped_column(Text, nullable=False)
+    completeness: Mapped[str] = mapped_column(Text, nullable=False)
+    completeness_reasons: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    risk_level: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_factors: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    recommended_scope: Mapped[str] = mapped_column(Text, nullable=False)
+    scope_reasons: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    counts: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    limits: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    uncertainty: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class ImpactItem(Base):
+    """One changed or impacted symbol, with the path that explains its inclusion."""
+
+    __tablename__ = "impact_items"
+    __table_args__ = (
+        CheckConstraint(
+            "strength IN ('CHANGED', 'DIRECT', 'TRANSITIVE', 'IMPORT_ONLY', 'HEURISTIC')",
+            name="strength_valid",
+        ),
+        CheckConstraint(
+            "target_symbol_id IS NOT NULL OR base_symbol_id IS NOT NULL", name="has_symbol"
+        ),
+        Index(None, "report_id", "depth"),
+    )
+
+    id: Mapped[int] = _bigint_pk()
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("impact_reports.id", ondelete="CASCADE"), nullable=False
+    )
+    target_symbol_id: Mapped[int | None] = mapped_column(
+        ForeignKey("symbols.id", ondelete="SET NULL")
+    )
+    base_symbol_id: Mapped[int | None] = mapped_column(
+        ForeignKey("symbols.id", ondelete="SET NULL")
+    )
+    qualified_name: Mapped[str] = mapped_column(Text, nullable=False)
+    symbol_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    path: Mapped[str | None] = mapped_column(Text)
+    is_test: Mapped[bool] = mapped_column(nullable=False, default=False)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False)
+    strength: Mapped[str] = mapped_column(Text, nullable=False)
+    seed_qualified_name: Mapped[str] = mapped_column(Text, nullable=False)
+    seed_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    graph: Mapped[str] = mapped_column(Text, nullable=False)  # TARGET or BASE
+    explanation: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)

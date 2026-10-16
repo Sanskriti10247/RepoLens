@@ -369,3 +369,45 @@ class ChangedSymbolOut(Schema):
 class ChangedSymbolPage(Schema):
     items: list[ChangedSymbolOut]
     page: PageMeta
+
+
+class ImpactReportOut(Schema):
+    id: uuid.UUID
+    change_set_id: uuid.UUID
+    engine_version: str
+    completeness: str
+    completeness_reasons: list[dict[str, Any]]
+    risk_level: str
+    risk_factors: list[dict[str, Any]]
+    recommended_scope: str
+    scope_reasons: list[str]
+    counts: dict[str, Any]
+    limits: dict[str, Any]
+    uncertainty: dict[str, Any]
+    created_at: datetime
+    disclaimer: str = (
+        "Risk is an explainable heuristic score over the listed factors, not a probability "
+        "of failure. Heuristic items may be false positives; unresolved relationships may hide "
+        "real dependents."
+    )
+
+
+class ImpactItemOut(Schema):
+    id: int
+    target_symbol_id: int | None
+    base_symbol_id: int | None
+    qualified_name: str
+    symbol_kind: str
+    path: str | None
+    is_test: bool
+    depth: int
+    strength: str
+    seed_qualified_name: str
+    seed_reason: str
+    graph: str
+    explanation: list[dict[str, Any]]
+
+
+class ImpactItemPage(Schema):
+    items: list[ImpactItemOut]
+    page: PageMeta
