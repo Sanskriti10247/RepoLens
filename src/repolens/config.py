@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     max_indexed_file_bytes: int = Field(default=1_000_000, ge=1)
     max_hashed_file_bytes: int = Field(default=20_000_000, ge=1)
     git_timeout_seconds: float = Field(default=300.0, gt=0)
+    # Reuse parser output for unchanged files (keyed by blob, path, module, parser version).
+    parse_cache_enabled: bool = True
     min_free_disk_mb: int = Field(default=1024, ge=0)
     # file:// repositories are for tests and offline demos only; off unless enabled.
     allow_local_repositories: bool = False

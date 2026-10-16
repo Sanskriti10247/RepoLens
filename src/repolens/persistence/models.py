@@ -763,3 +763,20 @@ class CoverageRecord(Base):
     test_node_id: Mapped[str | None] = mapped_column(Text)
     path: Mapped[str] = mapped_column(Text, nullable=False)
     lines: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False)
+
+
+class ParseCacheEntry(Base):
+    """Parser output for exact inputs (blob, path, module name, parser version).
+
+    The key covers everything the parser reads, so a hit is equivalent to re-parsing.
+    Resolution is never cached: it depends on the whole snapshot.
+    """
+
+    __tablename__ = "parse_cache"
+
+    blob_sha: Mapped[str] = mapped_column(Text, primary_key=True)
+    path: Mapped[str] = mapped_column(Text, primary_key=True)
+    module_name: Mapped[str] = mapped_column(Text, primary_key=True)
+    parser_version: Mapped[str] = mapped_column(Text, primary_key=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = _created_at()

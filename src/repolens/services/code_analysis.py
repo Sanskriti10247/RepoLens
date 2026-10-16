@@ -8,6 +8,8 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
+from sqlalchemy import select, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from repolens.codegraph.modules import ModuleName, dedupe_modules, module_names
@@ -15,8 +17,9 @@ from repolens.codegraph.resolver import resolve_files
 from repolens.domain.enums import FileAnalysisStatus, FileMode, Severity
 from repolens.parsers.base import ParsedFile
 from repolens.parsers.python import PythonAdapter, decode_python_source
+from repolens.parsers.serialize import from_json, to_json
 from repolens.persistence import analysis_writer as writer
-from repolens.persistence.models import AnalysisRun
+from repolens.persistence.models import AnalysisRun, ParseCacheEntry
 from repolens.repository.git import GitError
 from repolens.services.jobs import JobContext
 from repolens.services.snapshots import SnapshotFile
@@ -41,9 +44,11 @@ def synthetic_module_name(path: str) -> str:
 
 
 class PythonSnapshotAnalyzer:
-    def __init__(self, *, max_file_bytes: int) -> None:
+    def __init__(self, *, max_file_bytes: int, parse_cache: bool = True) -> None:
         self.adapter = PythonAdapter()
         self.max_file_bytes = max_file_bytes
+        self.parse_cache = parse_cache
+        self._new_cache_entries: list[tuple[SnapshotFile, str, ParsedFile]] = []
         self.version = f"{self.adapter.version}+resolver{RESOLVER_REVISION}"
 
     def analyze(
@@ -61,11 +66,15 @@ class PythonSnapshotAnalyzer:
         warnings: list[writer.WarningRecord] = []
         parsed_files: list[ParsedFile] = []
         file_ids = {f.path: f.id for f in files}
+        self._new_cache_entries = []
+        cache = self._load_cache(session, files, modules)
 
         for index, file in enumerate(files):
             if index % 50 == 0:
                 ctx.checkpoint()
-            outcome, parsed = self._analyze_file(file, modules, shadowed, read_blob, warnings)
+            outcome, parsed = self._analyze_file(
+                file, modules, shadowed, read_blob, warnings, cache
+            )
             outcomes.append(outcome)
             if parsed is not None:
                 parsed_files.append(parsed)
@@ -88,6 +97,7 @@ class PythonSnapshotAnalyzer:
         writer.write_file_outcomes(session, run.id, outcomes)
         writer.write_warnings(session, run.id, warnings)
         timings["persist_files_warnings_ms"] = _ms(step)
+        self._store_cache(session)
         timings["persist_ms"] = _ms(started)
 
         statuses = Counter(o.status.value for o in outcomes)
@@ -102,6 +112,8 @@ class PythonSnapshotAnalyzer:
             "dropped_name_references": resolution.dropped_name_references,
             "edges_by_type": edge_counts,
             "warnings": len(warnings),
+            "parse_cache_hits": len(cache),
+            "parse_cache_misses": len(self._new_cache_entries),
             "analysis_timings_ms": timings,
         }
 
@@ -132,6 +144,7 @@ class PythonSnapshotAnalyzer:
         shadowed_stubs: set[str],
         read_blob: ReadBlob,
         warnings: list[writer.WarningRecord],
+        cache: dict[str, ParsedFile],
     ) -> tuple[writer.FileOutcome, ParsedFile | None]:
         skip = _skip_status(file)
         if skip is not None:
@@ -149,31 +162,16 @@ class PythonSnapshotAnalyzer:
                 )
             )
             return writer.FileOutcome(file.id, FileAnalysisStatus.SKIPPED_TOO_LARGE, module), None
-        try:
-            source = decode_python_source(read_blob(file.blob_sha, max_bytes=self.max_file_bytes))
-        except GitError as exc:
-            warnings.append(
-                writer.WarningRecord("FILE_READ_FAILED", Severity.ERROR, str(exc)[:500], file.id)
-            )
-            return writer.FileOutcome(file.id, FileAnalysisStatus.FAILED, module), None
-        if source is None:
-            warnings.append(
-                writer.WarningRecord(
-                    "FILE_ENCODING", Severity.WARNING, "Not valid UTF-8 or PEP 263 source", file.id
-                )
-            )
-            return writer.FileOutcome(file.id, FileAnalysisStatus.SKIPPED_ENCODING, module), None
-        started = time.perf_counter()
-        try:
-            parsed = self.adapter.parse(file.path, module, source)
-        except Exception as exc:  # noqa: BLE001 - one file's parser defect must not sink the run
-            warnings.append(
-                writer.WarningRecord(
-                    "PARSE_FAILED", Severity.ERROR, f"{type(exc).__name__}: {exc}"[:500], file.id
-                )
-            )
-            return writer.FileOutcome(file.id, FileAnalysisStatus.FAILED, module), None
-        parse_ms = _ms(started)
+        parsed = cache.get(file.path)
+        parse_ms: float | None = None
+        if parsed is None:
+            started = time.perf_counter()
+            parsed, failure = self._parse(file, module, read_blob, warnings)
+            if failure is not None:
+                return failure, None
+            assert parsed is not None  # noqa: S101 - _parse returns one or the other
+            parse_ms = _ms(started)
+            self._new_cache_entries.append((file, module, parsed))
         for problem in parsed.problems[:MAX_PROBLEMS_PER_FILE]:
             warnings.append(
                 writer.WarningRecord(
@@ -185,11 +183,9 @@ class PythonSnapshotAnalyzer:
                     problem.span.last_line,
                 )
             )
-        status = (
-            FileAnalysisStatus.PARSED_WITH_ERRORS
-            if parsed.has_errors
-            else FileAnalysisStatus.PARSED
-        )
+        status = FileAnalysisStatus.PARSED
+        if parsed.has_errors:
+            status = FileAnalysisStatus.PARSED_WITH_ERRORS
         outcome = writer.FileOutcome(
             file.id,
             status,
@@ -199,6 +195,85 @@ class PythonSnapshotAnalyzer:
             parse_ms=parse_ms,
         )
         return outcome, parsed
+
+    def _parse(
+        self,
+        file: SnapshotFile,
+        module: str,
+        read_blob: ReadBlob,
+        warnings: list[writer.WarningRecord],
+    ) -> tuple[ParsedFile | None, writer.FileOutcome | None]:
+        try:
+            source = decode_python_source(read_blob(file.blob_sha, max_bytes=self.max_file_bytes))
+        except GitError as exc:
+            warnings.append(
+                writer.WarningRecord("FILE_READ_FAILED", Severity.ERROR, str(exc)[:500], file.id)
+            )
+            return None, writer.FileOutcome(file.id, FileAnalysisStatus.FAILED, module)
+        if source is None:
+            warnings.append(
+                writer.WarningRecord(
+                    "FILE_ENCODING", Severity.WARNING, "Not valid UTF-8 or PEP 263 source", file.id
+                )
+            )
+            return None, writer.FileOutcome(file.id, FileAnalysisStatus.SKIPPED_ENCODING, module)
+        try:
+            return self.adapter.parse(file.path, module, source), None
+        except Exception as exc:  # noqa: BLE001 - one file's parser defect must not sink the run
+            warnings.append(
+                writer.WarningRecord(
+                    "PARSE_FAILED", Severity.ERROR, f"{type(exc).__name__}: {exc}"[:500], file.id
+                )
+            )
+            return None, writer.FileOutcome(file.id, FileAnalysisStatus.FAILED, module)
+
+    # -- parse cache -----------------------------------------------------------------------
+
+    def _load_cache(
+        self, session: Session, files: list[SnapshotFile], modules: dict[str, ModuleName]
+    ) -> dict[str, ParsedFile]:
+        if not self.parse_cache:
+            return {}
+        keys = [(f.blob_sha, f.path, modules[f.path].name) for f in files if f.path in modules]
+        found: dict[str, ParsedFile] = {}
+        for start in range(0, len(keys), 1000):
+            chunk = keys[start : start + 1000]
+            rows = session.execute(
+                select(ParseCacheEntry.path, ParseCacheEntry.payload).where(
+                    ParseCacheEntry.parser_version == self.version,
+                    tuple_(
+                        ParseCacheEntry.blob_sha,
+                        ParseCacheEntry.path,
+                        ParseCacheEntry.module_name,
+                    ).in_(chunk),
+                )
+            ).all()
+            for path, payload in rows:
+                try:
+                    found[path] = from_json(payload)
+                except (ValueError, KeyError, TypeError, IndexError):
+                    continue  # unreadable entry: parse the file again
+        return found
+
+    def _store_cache(self, session: Session) -> None:
+        if not self.parse_cache or not self._new_cache_entries:
+            return
+        rows = [
+            {
+                "blob_sha": file.blob_sha,
+                "path": file.path,
+                "module_name": module,
+                "parser_version": self.version,
+                "payload": to_json(parsed),
+            }
+            for file, module, parsed in self._new_cache_entries
+        ]
+        for start in range(0, len(rows), 200):
+            session.execute(
+                pg_insert(ParseCacheEntry)
+                .values(rows[start : start + 200])
+                .on_conflict_do_nothing()
+            )
 
 
 def _skip_status(file: SnapshotFile) -> FileAnalysisStatus | None:

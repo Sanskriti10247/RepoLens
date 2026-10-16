@@ -83,7 +83,10 @@ def default_analyzer(settings: Settings) -> SnapshotAnalyzer:
     """The analyzer used by workers; its version is part of every analysis key."""
     from repolens.services.code_analysis import PythonSnapshotAnalyzer  # noqa: PLC0415
 
-    return PythonSnapshotAnalyzer(max_file_bytes=settings.max_indexed_file_bytes)
+    return PythonSnapshotAnalyzer(
+        max_file_bytes=settings.max_indexed_file_bytes,
+        parse_cache=settings.parse_cache_enabled,
+    )
 
 
 # -- configuration ------------------------------------------------------------------------
