@@ -103,6 +103,16 @@ def test_config_change_falls_back_to_full_suite(
     assert all(i["evidence"][0]["kind"] == "FULL_SUITE_FALLBACK" for i in items.values())
 
 
+def test_untraceable_change_without_linked_tests_runs_full_suite(
+    client: TestClient, worker: Worker, inventory: FixtureRepo
+) -> None:
+    impact_id = run_change(client, worker, inventory, projects.CHANGE_DATA_ONLY)
+    plan, items = plan_for(client, impact_id)
+    assert plan["scope"] == "FULL_SUITE"
+    assert "no test linked" in plan["fallback_reason"]
+    assert selected(items) == ALL_TESTS
+
+
 def test_budget_excludes_explicitly(
     client: TestClient, worker: Worker, inventory: FixtureRepo
 ) -> None:

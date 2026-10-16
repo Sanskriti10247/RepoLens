@@ -146,7 +146,16 @@ def create_test_plan(
     scope = Scope(report.recommended_scope)
     evidence, durations = _gather_evidence(session, change, report, catalog, sources, scope)
 
-    fallback = "; ".join(report.scope_reasons) if scope is Scope.FULL_SUITE else None
+    if scope is Scope.BROAD and not any(
+        e.kind is not EvidenceKind.PREVIOUSLY_FAILED for found in evidence.values() for e in found
+    ):
+        # Changes that could not be traced, and no test linked to them: be conservative.
+        scope = Scope.FULL_SUITE
+        sources["fallback"] = "broad scope with no test linked to the changes"
+    reasons = list(report.scope_reasons)
+    if sources.get("fallback"):
+        reasons.append(str(sources["fallback"]))
+    fallback = "; ".join(reasons) if scope is Scope.FULL_SUITE else None
     budget = Budget(max_tests, max_seconds) if policy is Policy.BUDGETED else None
     result = select_tests(
         catalog,

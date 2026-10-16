@@ -92,6 +92,16 @@ def test_documentation_change_needs_no_tests(
     assert report["risk_level"] == "LOW"
 
 
+def test_ci_configuration_change_needs_no_tests(
+    client: TestClient, worker: Worker, inventory: FixtureRepo
+) -> None:
+    report, items = run_impact(client, worker, inventory, projects.CHANGE_CI_ONLY)
+    assert items == {}
+    assert report["completeness"] == "COMPLETE"
+    assert report["recommended_scope"] == "NONE"
+    assert not any(f["factor"] == "unmapped_changes" for f in report["risk_factors"])
+
+
 def test_module_level_constant_change(
     client: TestClient, worker: Worker, inventory: FixtureRepo
 ) -> None:

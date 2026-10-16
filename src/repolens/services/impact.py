@@ -65,6 +65,39 @@ SUITE_WIDE_FILES = frozenset(
         "requirements.txt",
     }
 )
+# Files that cannot change how the repository's tests behave when run locally: CI and editor
+# configuration, ownership and licence files. Treated like documentation.
+NON_RUNTIME_PREFIXES = (".github/", ".gitlab/", ".circleci/", ".devcontainer/", ".vscode/")
+NON_RUNTIME_NAMES = frozenset(
+    {
+        ".pre-commit-config.yaml",
+        ".gitlab-ci.yml",
+        ".travis.yml",
+        ".gitignore",
+        ".gitattributes",
+        ".editorconfig",
+        ".mailmap",
+        "CODEOWNERS",
+        ".readthedocs.yaml",
+        ".readthedocs.yml",
+        "LICENSE",
+        "LICENSE.txt",
+        "LICENSE.md",
+        "COPYING",
+    }
+)
+
+
+def has_runtime_effect(file: ChangedFile) -> bool:
+    """False for documentation and for files that cannot affect test execution."""
+    path = file.new_path or file.old_path or ""
+    if file.role == "DOC" and file.mapping_status == ChangeMappingStatus.NON_PYTHON.value:
+        return False
+    return not (
+        path.startswith(NON_RUNTIME_PREFIXES) or PurePosixPath(path).name in NON_RUNTIME_NAMES
+    )
+
+
 # Method names too common to match against unresolved call sites meaningfully.
 COMMON_NAMES = frozenset(
     {
@@ -477,6 +510,7 @@ def _counts(
         "impacted_tests": sum(1 for i in items if i["is_test"]),
         "by_strength": dict(sorted(Counter(i["strength"] for i in items).items())),
         "impacted_files": len({i["path"] for i in items if i["path"]}),
+        "non_runtime_files": sum(1 for f in files if not has_runtime_effect(f)),
     }
 
 
@@ -497,8 +531,8 @@ def _completeness(
         status = ChangeMappingStatus(file.mapping_status)
         if status is ChangeMappingStatus.MAPPED:
             continue
-        if status is ChangeMappingStatus.NON_PYTHON and file.role == "DOC":
-            continue  # documentation has no runtime effect
+        if not has_runtime_effect(file):
+            continue  # documentation, CI and editor configuration
         reasons.append({"reason": f"FILE_{status.value}", "path": path})
     for label, result in (("TARGET", target), ("BASE", base)):
         if result.truncated:
@@ -632,7 +666,7 @@ def _risk(
     unmapped = sorted(
         (f.new_path or f.old_path or "")
         for f in files
-        if f.mapping_status != ChangeMappingStatus.MAPPED.value and f.role != "DOC"
+        if f.mapping_status != ChangeMappingStatus.MAPPED.value and has_runtime_effect(f)
     )
     factor(
         "unmapped_changes",
@@ -692,5 +726,5 @@ def _scope(
     if reasons:
         return "BROAD", reasons
     if counts["changed_symbols"] == 0:
-        return "NONE", ["only documentation or formatting changed"]
+        return "NONE", ["only documentation, CI configuration or formatting changed"]
     return "TARGETED", ["all changes were traced to symbols and tests"]

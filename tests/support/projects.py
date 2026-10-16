@@ -117,6 +117,11 @@ CHANGE_UTIL_ONLY = {
 }
 CHANGE_CONFIG_ONLY = {"pyproject.toml": INVENTORY["pyproject.toml"] + 'description = "x"\n'}
 CHANGE_DOCS_ONLY = {"README.md": "# inventory\n\nMore words.\n"}
+CHANGE_CI_ONLY = {
+    ".github/workflows/ci.yml": "on: push\njobs: {}\n",
+    ".pre-commit-config.yaml": "repos: []\n",
+}
+CHANGE_DATA_ONLY = {"inventory/rates.json": '{"tax": 0.2}\n'}
 CHANGE_TAX_CONSTANT = {
     "inventory/pricing.py": INVENTORY["inventory/pricing.py"].replace("TAX = 0.2", "TAX = 0.21")
 }
