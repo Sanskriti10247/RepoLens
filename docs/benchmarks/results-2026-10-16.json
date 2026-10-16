@@ -1,0 +1,782 @@
+{
+  "environment": {
+    "timestamp": "2026-10-16T04:33:24+00:00",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13420H",
+    "cores": 12,
+    "memory_gb": 15.3,
+    "os": "Linux 7.2.5-3-omarchy",
+    "python": "3.14.8",
+    "git": "git version 2.55.0",
+    "docker": "29.7.2",
+    "postgres": "16 (docker compose, same machine)",
+    "note": "shared development laptop; other workloads were running"
+  },
+  "repositories": {
+    "https://github.com/pallets/itsdangerous": {
+      "ref": "main",
+      "analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "672971d66a2ef9f85151e53283113f33d642dabd",
+        "wall_ms": 7442.5,
+        "counts": {
+          "files": 50,
+          "symbols": 159,
+          "warnings": 0,
+          "references": 577,
+          "python_files": 15,
+          "edges_by_type": {
+            "CALLS": 94,
+            "IMPORTS": 71,
+            "CONTAINS": 144,
+            "INHERITS": 18,
+            "REFERENCES": 31
+          },
+          "files_by_status": {
+            "PARSED": 15,
+            "SKIPPED_UNSUPPORTED": 35
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 0,
+          "tests_discovered": 37,
+          "parse_cache_misses": 15,
+          "analysis_timings_ms": {
+            "parse_ms": 42.5,
+            "persist_ms": 87.0,
+            "resolve_ms": 10.9,
+            "persist_edges_ms": 28.7,
+            "persist_symbols_ms": 10.6,
+            "persist_references_ms": 28.8,
+            "persist_files_warnings_ms": 4.9
+          },
+          "references_by_status": {
+            "DYNAMIC": 12,
+            "EXTERNAL": 190,
+            "RESOLVED": 216,
+            "UNRESOLVED": 159
+          },
+          "dropped_name_references": 281
+        },
+        "timings_ms": {
+          "fetch_ms": 7197.8,
+          "analyze_ms": 152.7,
+          "snapshot_ms": 35.2
+        },
+        "snapshot_id": "58a0d963-f249-4a16-ac02-f7c93dbe7ed7"
+      },
+      "incremental_analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "117218e006641644a038772e557a3ae6cb1448a1",
+        "wall_ms": 8642.2,
+        "counts": {
+          "files": 49,
+          "symbols": 160,
+          "warnings": 0,
+          "references": 585,
+          "python_files": 15,
+          "edges_by_type": {
+            "CALLS": 94,
+            "IMPORTS": 71,
+            "CONTAINS": 145,
+            "INHERITS": 18,
+            "REFERENCES": 31
+          },
+          "files_by_status": {
+            "PARSED": 15,
+            "SKIPPED_BINARY": 2,
+            "SKIPPED_UNSUPPORTED": 32
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 11,
+          "tests_discovered": 37,
+          "parse_cache_misses": 4,
+          "analysis_timings_ms": {
+            "parse_ms": 20.1,
+            "persist_ms": 66.8,
+            "resolve_ms": 3.5,
+            "persist_edges_ms": 16.5,
+            "persist_symbols_ms": 12.3,
+            "persist_references_ms": 29.5,
+            "persist_files_warnings_ms": 3.9
+          },
+          "references_by_status": {
+            "DYNAMIC": 12,
+            "EXTERNAL": 198,
+            "RESOLVED": 216,
+            "UNRESOLVED": 159
+          },
+          "dropped_name_references": 283
+        },
+        "timings_ms": {
+          "fetch_ms": 8476.7,
+          "analyze_ms": 98.4,
+          "snapshot_ms": 23.1
+        },
+        "snapshot_id": "70ceec4d-d203-4c74-b2d6-d5250ac0ce24"
+      },
+      "impact": {
+        "change_set_id": "62e08f07-e4db-4cd7-ad3b-3e450ae53344",
+        "status": "SUCCEEDED",
+        "wall_ms": 3062.8,
+        "timings_ms": {
+          "diff_ms": 58.7,
+          "fetch_ms": 2924.5,
+          "analysis_ms": 4.7,
+          "impact_stage_ms": 46.4
+        },
+        "summary": {
+          "added_lines": 195,
+          "changed_files": 16,
+          "deleted_lines": 946,
+          "changed_symbols": 6,
+          "files_by_change_type": {
+            "ADDED": 3,
+            "DELETED": 2,
+            "MODIFIED": 11
+          },
+          "symbols_by_change_kind": {
+            "REMOVED": 1,
+            "MODIFIED": 5
+          },
+          "files_by_mapping_status": {
+            "BINARY": 2,
+            "MAPPED": 4,
+            "NON_PYTHON": 10
+          }
+        },
+        "impact": {
+          "report_id": "46738fd4-6206-4b65-8dac-9c38280cc675",
+          "risk_level": "HIGH",
+          "completeness": "PARTIAL",
+          "impacted_tests": 7,
+          "impacted_symbols": 16,
+          "recommended_scope": "FULL_SUITE"
+        },
+        "report_scope": "FULL_SUITE",
+        "plan": {
+          "id": "0f898102-08dc-472d-9c41-80342bb5e6c0",
+          "selection_ms": 27.3,
+          "selected": 37,
+          "total": 37
+        },
+        "base": "117218e006641644a038772e557a3ae6cb1448a1",
+        "target": "672971d66a2ef9f85151e53283113f33d642dabd"
+      }
+    },
+    "https://github.com/pallets/click": {
+      "ref": "main",
+      "analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+        "wall_ms": 11317.9,
+        "counts": {
+          "files": 178,
+          "symbols": 2169,
+          "warnings": 0,
+          "references": 8884,
+          "python_files": 91,
+          "edges_by_type": {
+            "CALLS": 2103,
+            "IMPORTS": 297,
+            "CONTAINS": 2078,
+            "INHERITS": 82,
+            "REFERENCES": 1400
+          },
+          "files_by_status": {
+            "PARSED": 91,
+            "SKIPPED_BINARY": 2,
+            "SKIPPED_UNSUPPORTED": 85
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 0,
+          "tests_discovered": 606,
+          "parse_cache_misses": 91,
+          "analysis_timings_ms": {
+            "parse_ms": 714.0,
+            "persist_ms": 989.5,
+            "resolve_ms": 96.9,
+            "persist_edges_ms": 288.8,
+            "persist_symbols_ms": 119.6,
+            "persist_references_ms": 449.7,
+            "persist_files_warnings_ms": 7.2
+          },
+          "references_by_status": {
+            "DYNAMIC": 352,
+            "EXTERNAL": 2611,
+            "RESOLVED": 4010,
+            "UNRESOLVED": 1911
+          },
+          "dropped_name_references": 3647
+        },
+        "timings_ms": {
+          "fetch_ms": 9331.0,
+          "analyze_ms": 1888.1,
+          "snapshot_ms": 53.7
+        },
+        "snapshot_id": "ccae7ecd-d40c-4e6c-8b54-06d61af23f04"
+      },
+      "incremental_analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "68e7ea7228ca144c52e4d1d282cc09da59f7771f",
+        "wall_ms": 10172.1,
+        "counts": {
+          "files": 166,
+          "symbols": 2028,
+          "warnings": 0,
+          "references": 8234,
+          "python_files": 79,
+          "edges_by_type": {
+            "CALLS": 1991,
+            "IMPORTS": 285,
+            "CONTAINS": 1949,
+            "INHERITS": 80,
+            "REFERENCES": 1292
+          },
+          "files_by_status": {
+            "PARSED": 79,
+            "SKIPPED_BINARY": 2,
+            "SKIPPED_UNSUPPORTED": 85
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 64,
+          "tests_discovered": 538,
+          "parse_cache_misses": 15,
+          "analysis_timings_ms": {
+            "parse_ms": 356.9,
+            "persist_ms": 882.4,
+            "resolve_ms": 80.7,
+            "persist_edges_ms": 291.9,
+            "persist_symbols_ms": 110.7,
+            "persist_references_ms": 427.5,
+            "persist_files_warnings_ms": 5.0
+          },
+          "references_by_status": {
+            "DYNAMIC": 337,
+            "EXTERNAL": 2324,
+            "RESOLVED": 3752,
+            "UNRESOLVED": 1821
+          },
+          "dropped_name_references": 3462
+        },
+        "timings_ms": {
+          "fetch_ms": 8681.8,
+          "analyze_ms": 1403.7,
+          "snapshot_ms": 43.9
+        },
+        "snapshot_id": "c466cc7d-1966-4d8e-a7f5-0f918c3cece1"
+      },
+      "impact": {
+        "change_set_id": "6d328b9b-a351-46b4-b8c1-fc4876a56df4",
+        "status": "SUCCEEDED",
+        "wall_ms": 9129.4,
+        "timings_ms": {
+          "diff_ms": 253.8,
+          "fetch_ms": 8520.9,
+          "analysis_ms": 6.0,
+          "impact_stage_ms": 314.4
+        },
+        "summary": {
+          "added_lines": 2649,
+          "changed_files": 42,
+          "deleted_lines": 514,
+          "changed_symbols": 248,
+          "files_by_change_type": {
+            "ADDED": 13,
+            "DELETED": 1,
+            "MODIFIED": 28
+          },
+          "symbols_by_change_kind": {
+            "ADDED": 171,
+            "REMOVED": 30,
+            "MODIFIED": 47
+          },
+          "files_by_mapping_status": {
+            "MAPPED": 28,
+            "NON_PYTHON": 14
+          }
+        },
+        "impact": {
+          "report_id": "3fbf3f06-b6f9-4fa9-8ecb-a94ebc417634",
+          "risk_level": "HIGH",
+          "completeness": "PARTIAL",
+          "impacted_tests": 574,
+          "impacted_symbols": 829,
+          "recommended_scope": "FULL_SUITE"
+        },
+        "report_scope": "FULL_SUITE",
+        "plan": {
+          "id": "da23ca5b-7d8f-4dde-bb1b-552c8107521d",
+          "selection_ms": 146.2,
+          "selected": 606,
+          "total": 606
+        },
+        "base": "68e7ea7228ca144c52e4d1d282cc09da59f7771f",
+        "target": "2247b35ea1c47c727d7a06e51fa280e12a863ff6"
+      }
+    },
+    "https://github.com/pallets/flask": {
+      "ref": "main",
+      "analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "d086db856be187255b8ec61ef409357393020f32",
+        "wall_ms": 10556.6,
+        "counts": {
+          "files": 236,
+          "symbols": 1705,
+          "warnings": 0,
+          "references": 5233,
+          "python_files": 83,
+          "edges_by_type": {
+            "CALLS": 880,
+            "IMPORTS": 197,
+            "CONTAINS": 1622,
+            "INHERITS": 72,
+            "REFERENCES": 256
+          },
+          "files_by_status": {
+            "PARSED": 83,
+            "SKIPPED_BINARY": 5,
+            "SKIPPED_UNSUPPORTED": 148
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 0,
+          "tests_discovered": 392,
+          "parse_cache_misses": 83,
+          "analysis_timings_ms": {
+            "parse_ms": 347.5,
+            "persist_ms": 594.6,
+            "resolve_ms": 112.7,
+            "persist_edges_ms": 146.2,
+            "persist_symbols_ms": 93.1,
+            "persist_references_ms": 265.7,
+            "persist_files_warnings_ms": 6.6
+          },
+          "references_by_status": {
+            "DYNAMIC": 209,
+            "EXTERNAL": 1492,
+            "RESOLVED": 1332,
+            "UNRESOLVED": 2200
+          },
+          "dropped_name_references": 2162
+        },
+        "timings_ms": {
+          "fetch_ms": 9328.9,
+          "analyze_ms": 1112.6,
+          "snapshot_ms": 72.1
+        },
+        "snapshot_id": "fe61f7ee-0a8e-404e-81b8-7e44308d73ed"
+      },
+      "incremental_analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "d318b683471101618febed18996405ad26462110",
+        "wall_ms": 5941.6,
+        "counts": {
+          "files": 236,
+          "symbols": 1705,
+          "warnings": 0,
+          "references": 5235,
+          "python_files": 83,
+          "edges_by_type": {
+            "CALLS": 880,
+            "IMPORTS": 197,
+            "CONTAINS": 1622,
+            "INHERITS": 72,
+            "REFERENCES": 256
+          },
+          "files_by_status": {
+            "PARSED": 83,
+            "SKIPPED_BINARY": 5,
+            "SKIPPED_UNSUPPORTED": 148
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 73,
+          "tests_discovered": 392,
+          "parse_cache_misses": 10,
+          "analysis_timings_ms": {
+            "parse_ms": 162.5,
+            "persist_ms": 562.1,
+            "resolve_ms": 62.5,
+            "persist_edges_ms": 154.4,
+            "persist_symbols_ms": 95.7,
+            "persist_references_ms": 274.1,
+            "persist_files_warnings_ms": 7.0
+          },
+          "references_by_status": {
+            "DYNAMIC": 209,
+            "EXTERNAL": 1493,
+            "RESOLVED": 1332,
+            "UNRESOLVED": 2201
+          },
+          "dropped_name_references": 2163
+        },
+        "timings_ms": {
+          "fetch_ms": 4976.2,
+          "analyze_ms": 864.2,
+          "snapshot_ms": 59.7
+        },
+        "snapshot_id": "8cefd6b9-e9c2-4c62-8ff2-1f88650b6288"
+      },
+      "impact": {
+        "change_set_id": "afeb24a8-ff67-41b1-8280-3f76320e8da6",
+        "status": "SUCCEEDED",
+        "wall_ms": 13942.1,
+        "timings_ms": {
+          "diff_ms": 127.6,
+          "fetch_ms": 13703.5,
+          "analysis_ms": 6.6,
+          "impact_stage_ms": 77.0
+        },
+        "summary": {
+          "added_lines": 105,
+          "changed_files": 15,
+          "deleted_lines": 473,
+          "changed_symbols": 26,
+          "files_by_change_type": {
+            "MODIFIED": 15
+          },
+          "symbols_by_change_kind": {
+            "MODIFIED": 26
+          },
+          "files_by_mapping_status": {
+            "MAPPED": 10,
+            "NON_PYTHON": 5
+          }
+        },
+        "impact": {
+          "report_id": "70e49f36-02d3-4001-89e6-a7b13e4560c6",
+          "risk_level": "HIGH",
+          "completeness": "PARTIAL",
+          "impacted_tests": 180,
+          "impacted_symbols": 86,
+          "recommended_scope": "FULL_SUITE"
+        },
+        "report_scope": "FULL_SUITE",
+        "plan": {
+          "id": "9aeb6ec6-4ef2-4388-a473-b66cfaf8ea53",
+          "selection_ms": 85.6,
+          "selected": 392,
+          "total": 392
+        },
+        "base": "d318b683471101618febed18996405ad26462110",
+        "target": "d086db856be187255b8ec61ef409357393020f32"
+      }
+    },
+    "https://github.com/psf/requests": {
+      "ref": "main",
+      "analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+        "wall_ms": 10740.4,
+        "counts": {
+          "files": 130,
+          "symbols": 844,
+          "warnings": 0,
+          "references": 3500,
+          "python_files": 37,
+          "edges_by_type": {
+            "CALLS": 957,
+            "IMPORTS": 219,
+            "CONTAINS": 807,
+            "INHERITS": 41,
+            "REFERENCES": 94
+          },
+          "files_by_status": {
+            "PARSED": 37,
+            "SKIPPED_BINARY": 5,
+            "SKIPPED_SYMLINK": 2,
+            "SKIPPED_UNSUPPORTED": 86
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 0,
+          "tests_discovered": 347,
+          "parse_cache_misses": 37,
+          "analysis_timings_ms": {
+            "parse_ms": 243.0,
+            "persist_ms": 404.8,
+            "resolve_ms": 27.5,
+            "persist_edges_ms": 113.2,
+            "persist_symbols_ms": 50.3,
+            "persist_references_ms": 178.7,
+            "persist_files_warnings_ms": 10.8
+          },
+          "references_by_status": {
+            "DYNAMIC": 136,
+            "EXTERNAL": 1285,
+            "RESOLVED": 1168,
+            "UNRESOLVED": 911
+          },
+          "dropped_name_references": 1750
+        },
+        "timings_ms": {
+          "fetch_ms": 9900.9,
+          "analyze_ms": 730.1,
+          "snapshot_ms": 64.7
+        },
+        "snapshot_id": "032d0bfa-b2eb-4945-891a-bb73ba2130a0"
+      },
+      "incremental_analysis": {
+        "status": "SUCCEEDED",
+        "error": null,
+        "commit_sha": "8068356288978c4f54661ae6f95afe0e0831885e",
+        "wall_ms": 5437.2,
+        "counts": {
+          "files": 130,
+          "symbols": 844,
+          "warnings": 0,
+          "references": 3500,
+          "python_files": 37,
+          "edges_by_type": {
+            "CALLS": 957,
+            "IMPORTS": 219,
+            "CONTAINS": 807,
+            "INHERITS": 41,
+            "REFERENCES": 94
+          },
+          "files_by_status": {
+            "PARSED": 37,
+            "SKIPPED_BINARY": 5,
+            "SKIPPED_SYMLINK": 2,
+            "SKIPPED_UNSUPPORTED": 86
+          },
+          "incomplete_files": 0,
+          "parse_cache_hits": 37,
+          "tests_discovered": 347,
+          "parse_cache_misses": 0,
+          "analysis_timings_ms": {
+            "parse_ms": 88.1,
+            "persist_ms": 365.4,
+            "resolve_ms": 28.0,
+            "persist_edges_ms": 119.6,
+            "persist_symbols_ms": 43.7,
+            "persist_references_ms": 194.0,
+            "persist_files_warnings_ms": 8.1
+          },
+          "references_by_status": {
+            "DYNAMIC": 136,
+            "EXTERNAL": 1285,
+            "RESOLVED": 1168,
+            "UNRESOLVED": 911
+          },
+          "dropped_name_references": 1750
+        },
+        "timings_ms": {
+          "fetch_ms": 4800.0,
+          "analyze_ms": 540.1,
+          "snapshot_ms": 53.0
+        },
+        "snapshot_id": "8cbca790-aae3-4ec7-99ad-0c3c3990e644"
+      },
+      "impact": {
+        "change_set_id": "01eed991-52b0-4141-b96f-07b7504f2189",
+        "status": "SUCCEEDED",
+        "wall_ms": 13306.0,
+        "timings_ms": {
+          "diff_ms": 14.9,
+          "fetch_ms": 13245.3,
+          "analysis_ms": 5.0,
+          "impact_stage_ms": 8.5
+        },
+        "summary": {
+          "added_lines": 5,
+          "changed_files": 3,
+          "deleted_lines": 5,
+          "changed_symbols": 0,
+          "files_by_change_type": {
+            "MODIFIED": 3
+          },
+          "symbols_by_change_kind": {},
+          "files_by_mapping_status": {
+            "NON_PYTHON": 3
+          }
+        },
+        "impact": {
+          "report_id": "9c2f3e3b-de61-4a1c-94c9-600c1a2d59aa",
+          "risk_level": "LOW",
+          "completeness": "COMPLETE",
+          "impacted_tests": 0,
+          "impacted_symbols": 0,
+          "recommended_scope": "NONE"
+        },
+        "report_scope": "NONE",
+        "plan": {
+          "id": "df84cd99-891d-461b-a9d8-511f15ba130d",
+          "selection_ms": 65.8,
+          "selected": 0,
+          "total": 347
+        },
+        "base": "8068356288978c4f54661ae6f95afe0e0831885e",
+        "target": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60"
+      }
+    }
+  },
+  "sandbox_startup": {
+    "samples": 5,
+    "median_ms": 707.0,
+    "min_ms": 636.0,
+    "max_ms": 1073.0,
+    "what": "docker run of the sandbox image with one trivial pytest test (create, run, report, remove)"
+  },
+  "fixture_selection": {
+    "with_tax body change": {
+      "scope": "TARGETED",
+      "selected_tests": 3,
+      "total_tests": 6,
+      "selection_overhead_ms": 13.5,
+      "impact_wall_ms": 217.0,
+      "selected_run": {
+        "outcome": "PASSED",
+        "wall_ms": 847.8,
+        "sandbox_ms": 780.0,
+        "counts": {
+          "error": 0,
+          "total": 3,
+          "failed": 0,
+          "passed": 3,
+          "skipped": 0
+        }
+      },
+      "full_run": {
+        "outcome": "PASSED",
+        "wall_ms": 852.2,
+        "sandbox_ms": 796.0,
+        "counts": {
+          "error": 0,
+          "total": 6,
+          "failed": 0,
+          "passed": 6,
+          "skipped": 0
+        }
+      }
+    },
+    "with_tax regression": {
+      "scope": "TARGETED",
+      "selected_tests": 3,
+      "total_tests": 6,
+      "selection_overhead_ms": 15.2,
+      "impact_wall_ms": 215.3,
+      "selected_run": {
+        "outcome": "FAILED",
+        "wall_ms": 832.9,
+        "sandbox_ms": 771.0,
+        "counts": {
+          "error": 0,
+          "total": 3,
+          "failed": 3,
+          "passed": 0,
+          "skipped": 0
+        }
+      },
+      "full_run": {
+        "outcome": "FAILED",
+        "wall_ms": 860.5,
+        "sandbox_ms": 799.0,
+        "counts": {
+          "error": 0,
+          "total": 6,
+          "failed": 3,
+          "passed": 3,
+          "skipped": 0
+        }
+      }
+    },
+    "Item.total change": {
+      "scope": "BROAD",
+      "selected_tests": 5,
+      "total_tests": 6,
+      "selection_overhead_ms": 21.9,
+      "impact_wall_ms": 221.8,
+      "selected_run": {
+        "outcome": "PASSED",
+        "wall_ms": 825.2,
+        "sandbox_ms": 765.0,
+        "counts": {
+          "error": 0,
+          "total": 5,
+          "failed": 0,
+          "passed": 5,
+          "skipped": 0
+        }
+      },
+      "full_run": {
+        "outcome": "PASSED",
+        "wall_ms": 841.4,
+        "sandbox_ms": 784.0,
+        "counts": {
+          "error": 0,
+          "total": 6,
+          "failed": 0,
+          "passed": 6,
+          "skipped": 0
+        }
+      }
+    },
+    "util-only change": {
+      "scope": "TARGETED",
+      "selected_tests": 1,
+      "total_tests": 6,
+      "selection_overhead_ms": 14.3,
+      "impact_wall_ms": 229.4,
+      "selected_run": {
+        "outcome": "PASSED",
+        "wall_ms": 819.0,
+        "sandbox_ms": 759.0,
+        "counts": {
+          "error": 0,
+          "total": 1,
+          "failed": 0,
+          "passed": 1,
+          "skipped": 0
+        }
+      },
+      "full_run": {
+        "outcome": "PASSED",
+        "wall_ms": 813.1,
+        "sandbox_ms": 755.0,
+        "counts": {
+          "error": 0,
+          "total": 6,
+          "failed": 0,
+          "passed": 6,
+          "skipped": 0
+        }
+      }
+    },
+    "config-only change": {
+      "scope": "FULL_SUITE",
+      "selected_tests": 6,
+      "total_tests": 6,
+      "selection_overhead_ms": 12.0,
+      "impact_wall_ms": 185.8,
+      "selected_run": {
+        "outcome": "PASSED",
+        "wall_ms": 839.9,
+        "sandbox_ms": 781.0,
+        "counts": {
+          "error": 0,
+          "total": 6,
+          "failed": 0,
+          "passed": 6,
+          "skipped": 0
+        }
+      },
+      "full_run": {
+        "outcome": "PASSED",
+        "wall_ms": 886.2,
+        "sandbox_ms": 827.0,
+        "counts": {
+          "error": 0,
+          "total": 6,
+          "failed": 0,
+          "passed": 6,
+          "skipped": 0
+        }
+      }
+    }
+  }
+}
