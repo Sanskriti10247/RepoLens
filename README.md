@@ -81,10 +81,14 @@ static analysis misses.
 The model provider is off by default (`REPOLENS_LLM_PROVIDER=none`), and analysis, impact,
 selection and execution never depend on it. When it is enabled
 (`REPOLENS_LLM_PROVIDER=anthropic`, `uv sync --extra llm`, `ANTHROPIC_API_KEY` set):
-- Only symbol names, graph facts, warnings and test outcomes are sent.
 - Source code is withheld unless `REPOLENS_LLM_ALLOW_SOURCE_UPLOAD=true`.
+- With source withheld, only symbol names, paths, graph facts, warnings and test outcomes
+  are sent. Docstrings and source snippets count as source and are withheld too.
 - Answers must cite the retrieved evidence. An answer with unknown citations, a refusal or an
   error falls back to the deterministic answer.
+- RepoLens checks that every cited evidence id exists. It cannot check that the explanation
+  is true, and repository text can try to steer the model. The cited evidence is therefore
+  always shown next to the explanation.
 
 The provider integration is tested against a fake client only. It has not been exercised
 against the live API in this repository's test suite.
