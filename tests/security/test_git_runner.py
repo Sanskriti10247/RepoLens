@@ -205,3 +205,32 @@ def _mktree(repo: FixtureRepo, spec: str) -> str:
         env={"PATH": os.environ["PATH"], "GIT_CONFIG_GLOBAL": os.devnull},
     )
     return result.stdout.decode().strip()
+
+
+def test_fetch_accepts_historic_metadata_quirks(tmp_path: Path) -> None:
+    """Real repositories contain harmless malformed commit metadata; fetching must succeed."""
+    repo = FixtureRepo(tmp_path / "quirky")
+    repo.commit("initial", {"a.py": "x = 1\n"})
+    tree = repo.git("rev-parse", "HEAD^{tree}")
+    raw = (
+        f"tree {tree}\n"
+        "author Old Author <old@example.invalid> 1100000000 +05030\n"  # bad time zone
+        "committer Old Author <old@example.invalid> 1100000000 +05030\n\nold commit\n"
+    )
+    commit = (
+        subprocess.run(
+            ["git", "hash-object", "-t", "commit", "-w", "--literally", "--stdin"],
+            cwd=repo.path,
+            input=raw.encode(),
+            capture_output=True,
+            check=True,
+        )
+        .stdout.decode()
+        .strip()
+    )
+    repo.git("update-ref", "refs/heads/main", commit)
+    runner = GitRunner(tmp_path / "home", GitPolicy(allowed_protocols=("file",)))
+    mirror = MirrorStore(tmp_path / "mirrors", runner).fetch(
+        uuid.uuid4(), repo.url, max_bytes=10**7
+    )
+    assert (mirror / "HEAD").exists()

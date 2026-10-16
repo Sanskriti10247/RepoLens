@@ -24,6 +24,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 _DEFAULT_PATH = "/usr/local/bin:/usr/bin:/bin"
+# fsck message ids about commit/tree *formatting* only, never about paths or object integrity.
+BENIGN_FSCK_CHECKS = (
+    "zeroPaddedFilemode",
+    "badTimezone",
+    "badDate",
+    "badDateOverflow",
+    "zeroPaddedDate",
+    "missingSpaceBeforeDate",
+    "missingSpaceBeforeEmail",
+    "missingEmail",
+    "badEmail",
+    "badName",
+)
 
 
 class GitError(RuntimeError):
@@ -100,6 +113,10 @@ class GitRunner:
         }
         for protocol in self.policy.allowed_protocols:
             settings[f"protocol.{protocol}.allow"] = "always"
+        # Historic, harmless metadata quirks found in real repositories (e.g. Flask, requests)
+        # are downgraded to warnings. Path checks (.git, .., malformed names) stay errors.
+        for check in BENIGN_FSCK_CHECKS:
+            settings[f"fetch.fsck.{check}"] = "warn"
         args: list[str] = []
         for key, value in settings.items():
             args += ["-c", f"{key}={value}"]
