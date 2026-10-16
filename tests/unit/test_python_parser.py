@@ -109,8 +109,8 @@ def test_decorators_are_recorded_and_included_in_span() -> None:
     assert func.decorators == ("functools.lru_cache(maxsize=None)", "register")
     assert func.span.start_line == 3  # starts at the first decorator
     assert refs(parsed, ReferenceKind.DECORATOR) == [
-        ("pkg.mod#MODULE", "functools.lru_cache"),
-        ("pkg.mod#MODULE", "register"),
+        ("pkg.mod.cached#FUNCTION", "functools.lru_cache"),
+        ("pkg.mod.cached#FUNCTION", "register"),
     ]
     assert refs(parsed, ReferenceKind.CALL) == []  # the decorator call is not double counted
 

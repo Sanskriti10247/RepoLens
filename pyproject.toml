@@ -51,6 +51,9 @@ ignore = [
     "S603",     # subprocess without shell is the intended pattern; inputs are validated
 ]
 
+[tool.ruff.lint.pylint]
+max-returns = 10
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106", "S107", "S108", "PLR0915", "S607"]
 "migrations/**" = ["E501"]

@@ -237,18 +237,6 @@ class _Extractor:
             if inner is None:
                 return
             definition = inner
-        for decorator in decorators:
-            expression = next((c for c in decorator.children if c.is_named), None)
-            target_node = expression
-            if expression is not None and expression.type == "call":
-                target_node = expression.child_by_field_name("function")
-                arguments = expression.child_by_field_name("arguments")
-                if arguments is not None:
-                    stack.append((arguments, scope))  # e.g. @app.route("/", handler=h)
-            self._reference(
-                ReferenceKind.DECORATOR, scope, decorator, dotted_target(self.source, target_node)
-            )
-
         name_node = definition.child_by_field_name("name")
         if name_node is None:
             return
@@ -257,6 +245,17 @@ class _Extractor:
             child = self._class(definition, node, name, scope, decorators)
         else:
             child = self._function(definition, node, name, scope, decorators)
+        # A decorated definition depends on its decorators, so they are its references.
+        for decorator in decorators:
+            expression = next((c for c in decorator.children if c.is_named), None)
+            target_node = expression
+            if expression is not None and expression.type == "call":
+                target_node = expression.child_by_field_name("function")
+                arguments = expression.child_by_field_name("arguments")
+                if arguments is not None:
+                    stack.append((arguments, scope))  # e.g. @app.route("/", handler=h)
+            target = dotted_target(self.source, target_node)
+            self._reference(ReferenceKind.DECORATOR, child, decorator, target)
         body = definition.child_by_field_name("body")
         if body is not None:
             stack.append((body, child))
