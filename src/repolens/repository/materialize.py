@@ -100,9 +100,33 @@ def materialize(
                 result.skipped.append((path, f"SYMLINK_FAILED:{exc.errno}"))
                 continue
             result.symlinks += 1
+        created = [path for path, _ in links if (destination / path).is_symlink()]
+        for path in _escaping_links(destination, created):
+            # Each link was contained on its own, but chains can still leave the root
+            # (``a -> ..`` inside ``d/``, then ``b -> d/a/..``). Already unlinked.
+            result.symlinks -= 1
+            result.skipped.append((path, "SYMLINK_ESCAPES"))
     finally:
         os.close(root_fd)
     return result
+
+
+def _escaping_links(root: Path, paths: list[str]) -> list[str]:
+    """Unlink links whose fully resolved target is outside ``root``; return their paths."""
+    real_root = os.path.realpath(root)
+    remaining, escaping = list(paths), list[str]()
+    while True:
+        found = [
+            p
+            for p in remaining
+            if os.path.commonpath([real_root, os.path.realpath(root / p)]) != real_root
+        ]
+        if not found:
+            return escaping
+        escaping += found
+        remaining = [p for p in remaining if p not in found]
+        for path in found:  # unlink now so later checks see the final layout
+            (root / path).unlink()
 
 
 def _open_parent(root_fd: int, path: str, *, create: bool) -> tuple[int, str]:

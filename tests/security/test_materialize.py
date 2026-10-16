@@ -50,6 +50,23 @@ def test_materializes_files_modes_and_contained_symlinks(tmp_path: Path, runner:
     assert oct((dest / "pkg/a.py").stat().st_mode & 0o777) == "0o644"
 
 
+def test_chained_symlinks_cannot_escape(tmp_path: Path, runner: GitRunner) -> None:
+    # Each link is contained on its own; together ``chain`` resolves to the workspace parent.
+    repo = FixtureRepo(tmp_path / "src")
+    repo.write({"d/keep.txt": "k"})
+    repo.symlink("d/up", "..")
+    repo.symlink("chain", "d/up/..")
+    sha = repo.commit("links")
+    dest = tmp_path / "ws"
+    result = materialize(
+        runner, _mirror(tmp_path, runner, repo), sha, dest, max_bytes=10**6, max_files=100
+    )
+    assert not (dest / "chain").is_symlink()
+    assert ("chain", "SYMLINK_ESCAPES") in result.skipped
+    assert (dest / "d/up").is_symlink()  # resolves to the root itself: allowed
+    assert result.symlinks == 1
+
+
 @pytest.mark.parametrize(
     ("link", "target"),
     [
