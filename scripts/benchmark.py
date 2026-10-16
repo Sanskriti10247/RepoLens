@@ -39,7 +39,14 @@ from repolens.execution.docker import DockerSandbox, SandboxRequest
 from repolens.execution.policy import SandboxLimits
 from repolens.persistence.db import make_engine, make_session_factory, transaction
 from repolens.persistence.migrations import alembic_config
-from repolens.persistence.models import AnalysisRun, ChangeSet, ImpactReport, TestPlan, TestRun
+from repolens.persistence.models import (
+    AnalysisRun,
+    ChangeSet,
+    ImpactReport,
+    RepositorySnapshot,
+    TestPlan,
+    TestRun,
+)
 from repolens.services import analysis as analysis_service
 from repolens.services import change_analysis, execution, repositories, test_planning
 from repolens.test_selection.selection import Policy
@@ -132,8 +139,11 @@ class Bench:
         with transaction(self.factory) as session:
             run = session.get(AnalysisRun, run_id)
             assert run is not None
+            snapshot = session.get(RepositorySnapshot, run.snapshot_id) if run.snapshot_id else None
             return {
                 "status": run.status,
+                "error": run.error,
+                "commit_sha": snapshot.commit_sha if snapshot else None,
                 "wall_ms": round(wall * 1000, 1),
                 "counts": run.counts,
                 "timings_ms": run.timings_ms,
@@ -295,20 +305,27 @@ def main() -> None:
             cold = bench.analyze(repo_id, ref or "HEAD")
             entry: dict[str, Any] = {"ref": ref or "HEAD", "analysis": cold}
             mirror = bench.settings.mirrors_dir / f"{repo_id}.git"
-            history = subprocess.run(
-                [
-                    "git",
-                    "--git-dir",
-                    str(mirror),
-                    "rev-list",
-                    f"--max-count={args.impact_depth + 1}",
-                    ref or "HEAD",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.split()
+            history: list[str] = []
+            if cold["commit_sha"]:
+                history = subprocess.run(
+                    [
+                        "git",
+                        "--git-dir",
+                        str(mirror),
+                        "rev-list",
+                        "--first-parent",
+                        f"--max-count={args.impact_depth + 1}",
+                        cold["commit_sha"],
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout.split()
+            else:
+                print(f"{url}: analysis did not complete: {cold['error']}", file=sys.stderr)
             if len(history) > args.impact_depth:
+                # Incremental: an older commit analysed with the parse cache already warm.
+                entry["incremental_analysis"] = bench.analyze(repo_id, history[-1])
                 entry["impact"] = bench.impact(repo_id, history[-1], history[0])
                 entry["impact"]["base"], entry["impact"]["target"] = history[-1], history[0]
             report["repositories"][url] = entry
