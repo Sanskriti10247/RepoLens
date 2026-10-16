@@ -31,6 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from alembic import command
 from pydantic import SecretStr
 from sqlalchemy import text
+from tests.support import projects
+from tests.support.gitrepo import FixtureRepo
 
 from repolens.config import Settings
 from repolens.execution.docker import DockerSandbox, SandboxRequest
@@ -43,8 +45,6 @@ from repolens.services import change_analysis, execution, repositories, test_pla
 from repolens.test_selection.selection import Policy
 from repolens.worker.handlers import build_handlers
 from repolens.worker.runtime import Worker
-from tests.support import projects
-from tests.support.gitrepo import FixtureRepo
 
 BENCH_DB = "postgresql+psycopg://repolens:repolens@127.0.0.1:5433/repolens_bench"
 
@@ -160,9 +160,7 @@ class Bench:
                 "status": change.status,
                 "wall_ms": round(wall * 1000, 1),
                 "timings_ms": change.timings_ms,
-                "summary": {
-                    k: v for k, v in (change.summary or {}).items() if k != "impact"
-                },
+                "summary": {k: v for k, v in (change.summary or {}).items() if k != "impact"},
                 "impact": (change.summary or {}).get("impact"),
                 "report_scope": report.recommended_scope if report else None,
                 "plan": {
@@ -225,7 +223,10 @@ def sandbox_startup(samples: int, workdir: Path) -> dict[str, Any]:
         "median_ms": round(statistics.median(durations), 1),
         "min_ms": round(min(durations), 1),
         "max_ms": round(max(durations), 1),
-        "what": "docker run of the sandbox image with one trivial pytest test (create, run, report, remove)",
+        "what": (
+            "docker run of the sandbox image with one trivial pytest test "
+            "(create, run, report, remove)"
+        ),
     }
 
 
@@ -255,7 +256,9 @@ def fixture_selection(bench: Bench, workdir: Path) -> dict[str, Any]:
             assert plan is not None
             plan_scope, selected = plan.scope, plan.selected_tests
         selected_run = (
-            bench.run_tests(plan_id=uuid.UUID(impact["plan"]["id"])) if selected or plan_scope == "FULL_SUITE" else None
+            bench.run_tests(plan_id=uuid.UUID(impact["plan"]["id"]))
+            if selected or plan_scope == "FULL_SUITE"
+            else None
         )
         full_run = bench.run_tests(analysis_id=target_run)
         results[name] = {
@@ -277,7 +280,9 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--sandbox-samples", type=int, default=5)
     parser.add_argument("--skip-sandbox", action="store_true")
-    parser.add_argument("--impact-depth", type=int, default=5, help="commits between base and target")
+    parser.add_argument(
+        "--impact-depth", type=int, default=5, help="commits between base and target"
+    )
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory(prefix="repolens-bench-") as tmp:
@@ -291,8 +296,17 @@ def main() -> None:
             entry: dict[str, Any] = {"ref": ref or "HEAD", "analysis": cold}
             mirror = bench.settings.mirrors_dir / f"{repo_id}.git"
             history = subprocess.run(
-                ["git", "--git-dir", str(mirror), "rev-list", f"--max-count={args.impact_depth + 1}", ref or "HEAD"],
-                capture_output=True, text=True, check=True,
+                [
+                    "git",
+                    "--git-dir",
+                    str(mirror),
+                    "rev-list",
+                    f"--max-count={args.impact_depth + 1}",
+                    ref or "HEAD",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
             ).stdout.split()
             if len(history) > args.impact_depth:
                 entry["impact"] = bench.impact(repo_id, history[-1], history[0])

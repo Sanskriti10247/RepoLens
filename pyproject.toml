@@ -63,6 +63,7 @@ max-returns = 10
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106", "S107", "S108", "S311", "PLR0915", "S607"]
 "migrations/**" = ["E501"]
+"scripts/**" = ["S101", "S603", "S607"]  # developer tooling, like tests
 
 [tool.mypy]
 python_version = "3.12"
