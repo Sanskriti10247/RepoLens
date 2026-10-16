@@ -36,7 +36,7 @@ Each container is started by the worker with the `docker` CLI using an argument 
 | Immutable root filesystem | `--read-only` |
 | Bounded writable space | `--tmpfs /work` (repository copy, size-limited), `--tmpfs /tmp` (`noexec`) |
 | No network | `--network none` |
-| Resource limits | `--pids-limit`, `--memory` = `--memory-swap` (no extra swap), `--cpus`, `--ulimit nofile` |
+| Resource limits | `--pids-limit`, `--memory` = `--memory-swap` (no extra swap), `--cpus`, `--ulimit nofile`, `--ulimit core=0:0` (no core dumps, whatever the host's `core_pattern`) |
 | Wall-clock limit | enforced by the worker; the container is killed with `docker kill` |
 | Signal handling / zombies | `--init` |
 | No host access | only the materialised snapshot is mounted, read-only, at `/src`; no Docker socket; no host environment is passed (`docker run` receives no `-e`) |
@@ -51,7 +51,9 @@ characters). The API exposes no way to pass commands or arbitrary arguments.
 
 The snapshot is written into the workspace from Git objects (`repository/materialize.py`) with
 `O_NOFOLLOW | O_EXCL` relative to directory descriptors; symlinks are created only after all
-regular files and only when their target stays inside the workspace.
+regular files and only when their target stays inside the workspace. After all links exist,
+each one is resolved on disk, and any link that leaves the workspace through a chain of
+otherwise-contained links is removed (`SYMLINK_ESCAPES`).
 
 ## Verified behaviour
 
@@ -84,9 +86,17 @@ fsmonitor, dangerous transports, crafted trees, symlink escapes and path travers
 - **Result integrity.** The repository's tests run in the same container as the runner and
   as the same user. A malicious repository can make its own tests report anything (it can do
   that with `assert True` anyway). The sandbox protects the host; it does not make a
-  repository's self-reported results trustworthy.
-- **CPU and I/O contention.** CPU is capped per container, but block I/O is not limited, and
-  the number of concurrent sandboxes is bounded only by the number of worker processes.
+  repository's self-reported results trustworthy. One check applies: `PASSED` requires that
+  every requested test reported a result, and that at least one result exists. A repository
+  configuration that deselects tests (`addopts`, `conftest.py` hooks) and still exits 0 is
+  reported as `COLLECTION_ERROR`. Repository pytest configuration is otherwise honoured,
+  because real projects depend on it.
+- **CPU and I/O contention.** CPU is capped per container and concurrent sandboxes are capped
+  across workers (`REPOLENS_MAX_CONCURRENT_SANDBOXES`), but block I/O is not limited.
+- **Disk use while fetching.** The repository size limit is checked against GitHub's reported
+  size before the fetch and against the mirror on disk after it. During the fetch, only the
+  Git timeout bounds how much is written. A repository whose reported size is wrong can use
+  disk space in the data directory until the timeout or the post-fetch check removes it.
 - **Dependencies.** Without dependency installation, repositories that need third-party
   packages fail collection (`COLLECTION_ERROR`). Enabling installation would require a
   separate, network-enabled stage and a new approval (D-016).

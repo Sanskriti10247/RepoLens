@@ -251,7 +251,7 @@ class RunTestsHandler:
             assert repo is not None  # noqa: S101 - FK
             test_run.status = "RUNNING"
             test_run.started_at = func.now()
-            spec = {
+            spec: dict[str, Any] = {
                 "repo_id": repo.id,
                 "provider": repo.provider,
                 "url": repo.canonical_url,
@@ -271,7 +271,7 @@ class RunTestsHandler:
             result = self._execute(ctx, run_id, spec, source)
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
-        classification = classify(result)
+        classification = classify(result, spec["node_ids"])
         ctx.checkpoint()  # never record results for a job this worker no longer owns
         with transaction(ctx.session_factory) as session:
             self._record(session, run_id, spec, result, classification)
@@ -484,14 +484,16 @@ def _coverage_rows(
         ).all()
     }
     grouped: dict[tuple[str | None, str], set[int]] = {}
-    for path, info in (data.get("files") or {}).items():
-        contexts = info.get("contexts") or {}
-        for line, names in contexts.items():
-            if not str(line).isdigit():
+    files = data.get("files") if isinstance(data, dict) else None
+    # Untrusted report: accept only the expected shapes and plain ASCII line numbers.
+    for path, info in files.items() if isinstance(files, dict) else []:
+        contexts = info.get("contexts") if isinstance(info, dict) else None
+        for key, names in contexts.items() if isinstance(contexts, dict) else []:
+            if not (key.isascii() and key.isdigit() and len(key) < 10):
                 continue
-            for name in names or [""]:
-                node_id = by_qualified.get(name) if name else None
-                grouped.setdefault((node_id, str(path)), set()).add(int(line))
+            for name in names if isinstance(names, list) and names else [""]:
+                node_id = by_qualified.get(name) if isinstance(name, str) and name else None
+                grouped.setdefault((node_id, str(path)), set()).add(int(key))
     rows = [
         {"test_run_id": run_id, "test_node_id": node, "path": path, "lines": sorted(lines)}
         for (node, path), lines in sorted(

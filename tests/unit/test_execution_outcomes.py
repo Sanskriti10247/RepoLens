@@ -173,6 +173,8 @@ def test_valid_node_ids(node_id: str) -> None:
         "tests/test_a.txt",
         "tests/test_a.py::test_p[\n]",
         "tests/test_a.py;rm -rf /",
+        "tests/test_a.py\n",
+        "tests/test_a.py::test_one\n",
     ],
 )
 def test_invalid_node_ids(node_id: str) -> None:
@@ -215,9 +217,25 @@ def test_docker_command_contains_every_hardening_flag() -> None:
         "--cpus 1.5",
         "--log-driver none",
         "--init",
+        "--ulimit core=0:0",
         "type=bind,source=/data/ws/src,target=/src,readonly",
     ):
         assert flag in joined, flag
     assert "--privileged" not in command and "/var/run/docker.sock" not in joined
     assert "-e" not in command and "--env" not in command  # no environment passthrough
     assert command[-3:] == ["run", "--", "tests/test_a.py::test_one"]
+
+
+def test_pass_requires_every_requested_test_to_report() -> None:
+    ok = result(env(pytest_exit_code=0, junit=JUNIT_OK))
+    requested = ["tests/test_a.py::test_one", "tests/test_a.py::TestK::test_two[1]"]
+    assert classify(ok, requested).outcome is RunOutcome.PASSED
+    # e.g. repository addopts or a conftest hook deselected a test but pytest still exited 0
+    missing = classify(ok, [*requested, "tests/test_b.py::test_three"])
+    assert missing.outcome is RunOutcome.COLLECTION_ERROR
+    assert "tests/test_b.py::test_three" in missing.reason
+
+
+def test_pass_with_no_results_is_not_a_pass() -> None:
+    empty = result(env(pytest_exit_code=0, junit="<testsuites><testsuite/></testsuites>"))
+    assert classify(empty).outcome is RunOutcome.COLLECTION_ERROR

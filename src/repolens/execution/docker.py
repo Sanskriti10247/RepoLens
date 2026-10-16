@@ -106,6 +106,8 @@ class DockerSandbox:
             str(limits.cpus),
             "--ulimit",
             f"nofile={limits.open_files}:{limits.open_files}",
+            "--ulimit",
+            "core=0:0",  # no core dumps, whatever the host's core_pattern does with them
             "--ipc",
             "private",
             "--init",

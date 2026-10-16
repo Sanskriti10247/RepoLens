@@ -68,5 +68,5 @@ class ExecutionPolicy:
         if len(node_ids) > MAX_NODE_IDS:
             raise PolicyViolation(f"{len(node_ids)} tests exceed the limit of {MAX_NODE_IDS}")
         for node_id in node_ids:
-            if len(node_id) > 1000 or not _NODE_ID.match(node_id):
+            if len(node_id) > 1000 or not _NODE_ID.fullmatch(node_id):
                 raise PolicyViolation(f"Invalid test identifier: {node_id[:100]!r}")

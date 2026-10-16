@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -103,12 +104,39 @@ def parse_junit(text: str) -> list[TestResult]:
     return results
 
 
-def classify(result: SandboxResult) -> Classification:
+def classify(result: SandboxResult, requested: Sequence[str] = ()) -> Classification:
     container = _container_outcome(result)
     if container is not None:
         return container
     assert result.envelope is not None  # noqa: S101 - checked by _container_outcome
-    return _envelope_outcome(result.envelope)
+    classification = _envelope_outcome(result.envelope)
+    if classification.outcome is RunOutcome.PASSED and result.envelope.get("mode") != "collect":
+        return _require_results(classification, requested)
+    return classification
+
+
+def _require_results(classification: Classification, requested: Sequence[str]) -> Classification:
+    """A pass only counts if the tests that were asked for actually reported a result.
+
+    Repository configuration (``addopts``, ``conftest.py`` hooks) can deselect tests and still
+    exit 0; that must not read as a pass.
+    """
+    reported = {(r.classname, re.sub(r"\[.*\]$", "", r.name)) for r in classification.results}
+    missing = sorted(n for n in requested if node_id_key(n) not in reported)
+    if not classification.results or missing:
+        detail = f"; e.g. {', '.join(missing[:3])}" if missing else ""
+        reason = (
+            f"pytest exited 0 but {len(missing) or 'no'} requested test(s) reported no "
+            f"result{detail}"
+        )
+        return Classification(
+            RunOutcome.COLLECTION_ERROR,
+            reason[:500],
+            classification.pytest_exit_code,
+            classification.results,
+            classification.counts,
+        )
+    return classification
 
 
 def _container_outcome(result: SandboxResult) -> Classification | None:
