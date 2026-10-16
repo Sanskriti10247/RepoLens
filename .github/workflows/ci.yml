@@ -65,6 +65,27 @@ jobs:
       - name: Sandbox and git security tests
         run: uv run pytest -q tests/security
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: uv sync --locked
+      - run: npm ci --no-audit --no-fund
+      - run: npx --workspace apps/web playwright install --with-deps chromium
+      - run: ./scripts/build-sandbox.sh
+      - run: npm --workspace apps/web run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+      - name: Browser end-to-end workflow
+        run: ./scripts/e2e.sh
+
   web:
     runs-on: ubuntu-latest
     steps:

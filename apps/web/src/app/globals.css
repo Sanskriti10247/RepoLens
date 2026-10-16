@@ -170,7 +170,7 @@ ol.evidence li:target { background: var(--bg); }
 /* ---- explorer -------------------------------------------------------------- */
 .explorer { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .explorer-list { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; position: sticky; top: 12px; max-height: calc(100vh - 140px); overflow: auto; }
-.filters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.filters { display: flex; flex-direction: column; gap: 8px; margin: -12px -12px 8px; padding: 12px; position: sticky; top: -12px; background: var(--surface); border-bottom: 1px solid var(--border); z-index: 1; }
 .filters input { width: 100%; }
 .filter-row { display: flex; gap: 8px; align-items: center; }
 .symbol-list { list-style: none; padding: 0; margin: 0; }

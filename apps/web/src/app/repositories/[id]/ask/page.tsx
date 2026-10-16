@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
-import { Markdownish } from "@/components/Markdownish";
+import { Markdownish, inline } from "@/components/Markdownish";
 import { Badge, Card, ErrorPanel } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { label, shortSha } from "@/lib/format";
@@ -122,11 +122,11 @@ function EvidenceItem({ evidence }: { evidence: Evidence }) {
   return (
     <li id={evidence.id}>
       <span className="mono small">{evidence.id}</span> <Badge value={tone} text={label(evidence.category)} />{" "}
-      {evidence.statement}
+      {inline(evidence.statement)}
       {evidence.path && (
         <div className="muted small mono">
           {evidence.path}
-          {evidence.start_line ? `:${evidence.start_line}-${evidence.end_line}` : ""} @ {shortSha(evidence.commit_sha)}
+          {evidence.start_line ? `:${evidence.start_line}-${evidence.end_line}` : ""} @ {shortSha(evidence.commit_sha)}{" "}
           {evidence.text && (
             <button className="link" onClick={() => setOpen(!open)}>
               {open ? "hide source" : "show source"}

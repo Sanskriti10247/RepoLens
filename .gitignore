@@ -35,3 +35,7 @@ next-env.d.ts
 # Crash dumps
 core
 core.[0-9]*
+
+# Playwright output
+test-results/
+playwright-report/
