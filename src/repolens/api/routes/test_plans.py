@@ -89,3 +89,14 @@ def list_tests(analysis_id: uuid.UUID, session: SessionDep, page: Pagination) ->
         items=[TestCaseOut.model_validate(i) for i in items],
         page=PageMeta(total=total, limit=page.limit, offset=page.offset),
     )
+
+
+@router.get("/impact/{impact_id}/test-plans", response_model=list[TestPlanOut])
+def list_test_plans(impact_id: uuid.UUID, session: SessionDep) -> list[TestPlanOut]:
+    plans = session.execute(
+        select(TestPlan)
+        .where(TestPlan.change_set_id == impact_id)
+        .order_by(TestPlan.created_at.desc())
+        .limit(50)
+    ).scalars()
+    return [TestPlanOut.model_validate(p) for p in plans]

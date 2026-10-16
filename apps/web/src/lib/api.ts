@@ -18,10 +18,15 @@ interface ErrorEnvelope {
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body !== undefined && !headers.has("content-type")) {
+  const method = (init.method ?? "GET").toUpperCase();
+  const mutating = method !== "GET" && method !== "HEAD";
+  // The proxy only forwards same-origin JSON mutations (CSRF protection), so every mutation
+  // is sent as JSON, with an empty object when there is nothing else to send.
+  const body = mutating && init.body === undefined ? "{}" : init.body;
+  if (mutating && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
-  const response = await fetch(`/api${path}`, { ...init, headers, cache: "no-store" });
+  const response = await fetch(`/api${path}`, { ...init, body, headers, cache: "no-store" });
   if (!response.ok) {
     let envelope: ErrorEnvelope = {};
     try {
@@ -49,4 +54,8 @@ export interface ReadinessCheck {
 export interface Readiness {
   status: "ready" | "not_ready";
   checks: ReadinessCheck[];
+}
+
+export function postJson<T>(path: string, payload: unknown = {}): Promise<T> {
+  return apiFetch<T>(path, { method: "POST", body: JSON.stringify(payload) });
 }
