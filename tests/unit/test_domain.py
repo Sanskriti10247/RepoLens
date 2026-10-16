@@ -12,10 +12,17 @@ from repolens.domain.spans import Span
 
 class TestSpan:
     def test_valid_span(self) -> None:
-        span = Span(3, 4, 5, 0)
+        span = Span(3, 4, 5, 2)
         assert span.line_count == 3
-        assert span.contains_line(4)
+        assert span.contains_line(5)
         assert not span.contains_line(6)
+
+    def test_exclusive_end_at_column_zero(self) -> None:
+        span = Span(3, 0, 6, 0)  # ends at the start of line 6
+        assert span.last_line == 5
+        assert span.line_count == 3
+        assert not span.contains_line(6)
+        assert Span(2, 0, 2, 0).last_line == 2  # empty span stays on its line
 
     def test_single_line_span(self) -> None:
         assert Span(1, 0, 1, 10).line_count == 1
@@ -26,7 +33,7 @@ class TestSpan:
             Span(*args)
 
     def test_overlap(self) -> None:
-        span = Span(10, 0, 20, 0)
+        span = Span(10, 0, 20, 3)
         assert span.overlaps_lines(20, 25)
         assert span.overlaps_lines(1, 10)
         assert not span.overlaps_lines(21, 30)

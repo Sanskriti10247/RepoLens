@@ -31,3 +31,7 @@ next-env.d.ts
 .idea/
 .vscode/
 .DS_Store
+
+# Crash dumps
+core
+core.[0-9]*
