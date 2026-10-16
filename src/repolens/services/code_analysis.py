@@ -78,12 +78,16 @@ class PythonSnapshotAnalyzer:
 
         started = time.perf_counter()
         symbol_pairs = [(file_ids[p.path], symbol) for p in parsed_files for symbol in p.symbols]
+        step = time.perf_counter()
         symbol_ids = writer.write_symbols(session, run.id, symbol_pairs)
-        writer.link_parents(session, symbol_ids, (s for _, s in symbol_pairs))
+        timings["persist_symbols_ms"], step = _ms(step), time.perf_counter()
         reference_ids = writer.write_references(session, run.id, file_ids, symbol_ids, resolution)
+        timings["persist_references_ms"], step = _ms(step), time.perf_counter()
         edge_counts = writer.write_edges(session, run.id, symbol_ids, resolution, reference_ids)
+        timings["persist_edges_ms"], step = _ms(step), time.perf_counter()
         writer.write_file_outcomes(session, run.id, outcomes)
         writer.write_warnings(session, run.id, warnings)
+        timings["persist_files_warnings_ms"] = _ms(step)
         timings["persist_ms"] = _ms(started)
 
         statuses = Counter(o.status.value for o in outcomes)
