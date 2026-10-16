@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     # Worker
     job_lease_seconds: int = Field(default=60, ge=5)
 
+    # Sandboxed test execution (Docker). Only the configured image may be used.
+    sandbox_image: str = "repolens-sandbox:py3.12-1"
+    docker_binary: str = "docker"
+    sandbox_memory_mb: int = Field(default=1024, ge=64)
+    sandbox_cpus: float = Field(default=2.0, gt=0)
+    sandbox_pids: int = Field(default=256, ge=16)
+    sandbox_timeout_seconds: float = Field(default=600.0, gt=0)
+    sandbox_workspace_mb: int = Field(default=1024, ge=16)
+
     @property
     def mirrors_dir(self) -> Path:
         return self.data_dir / "mirrors"

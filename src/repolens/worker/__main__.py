@@ -8,6 +8,7 @@ from types import FrameType
 from repolens.config import get_settings
 from repolens.observability.logging import configure_logging, get_logger
 from repolens.persistence.db import make_engine, make_session_factory
+from repolens.services.execution import cleanup_stale_execution
 from repolens.worker.handlers import build_handlers
 from repolens.worker.runtime import Worker
 
@@ -15,6 +16,7 @@ from repolens.worker.runtime import Worker
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_format)
+    cleanup_stale_execution(settings)
     engine = make_engine(settings.database_url, pool_size=2)
     session_factory = make_session_factory(engine)
     worker = Worker(

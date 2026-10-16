@@ -478,3 +478,92 @@ class TestCasePage(Schema):
 
     items: list[TestCaseOut]
     page: PageMeta
+
+
+# -- test runs -------------------------------------------------------------------------------
+
+
+class TestRunCreate(BaseModel):
+    __test__ = False
+
+    plan_id: uuid.UUID | None = None
+    analysis_id: uuid.UUID | None = None
+    full_suite: bool = False
+    coverage: bool = True
+
+
+class TestRunOut(Schema):
+    __test__ = False
+
+    id: uuid.UUID
+    repository_id: uuid.UUID
+    analysis_run_id: uuid.UUID
+    snapshot_id: uuid.UUID
+    commit_sha: str
+    plan_id: uuid.UUID | None
+    mode: str
+    requested_node_ids: list[str]
+    coverage: bool
+    status: str
+    outcome: str | None
+    outcome_reason: str | None
+    pytest_exit_code: int | None
+    container_exit_code: int | None
+    counts: dict[str, Any] | None
+    duration_ms: float | None
+    image: str
+    limits: dict[str, Any]
+    output_truncated: bool
+    cleanup_ok: bool | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    job: JobOut | None = None
+
+
+class TestRunPage(Schema):
+    __test__ = False
+
+    items: list[TestRunOut]
+    page: PageMeta
+
+
+class TestResultOut(Schema):
+    __test__ = False
+
+    id: int
+    node_id: str
+    outcome: str
+    duration_ms: float
+    message: str | None
+
+
+class TestResultPage(Schema):
+    __test__ = False
+
+    items: list[TestResultOut]
+    page: PageMeta
+
+
+class TestRunLogs(Schema):
+    __test__ = False
+
+    stdout_tail: str | None
+    stderr_tail: str | None
+    output_truncated: bool
+    note: str = "Logs are bounded tails of pytest output captured inside the sandbox."
+
+
+class CoverageFileOut(Schema):
+    path: str
+    lines_covered: int
+    tests: int
+
+
+class CoverageSummary(Schema):
+    test_run_id: uuid.UUID
+    files: list[CoverageFileOut]
+    note: str = (
+        "Coverage records lines executed by the tests in this run. It is evidence of execution, "
+        "not proof that behaviour was verified."
+    )

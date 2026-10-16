@@ -6,6 +6,7 @@ from repolens.config import Settings
 from repolens.domain.enums import JobKind
 from repolens.services.analysis import AnalyzeRepositoryHandler, build_ingestion_deps
 from repolens.services.change_analysis import AnalyzeChangeHandler
+from repolens.services.execution import RunTestsHandler
 from repolens.services.impact import impact_stage
 from repolens.services.jobs import JobHandler
 
@@ -15,4 +16,5 @@ def build_handlers(settings: Settings) -> dict[JobKind, JobHandler]:
     return {
         JobKind.ANALYZE_REPOSITORY: AnalyzeRepositoryHandler(deps),
         JobKind.ANALYZE_CHANGE: AnalyzeChangeHandler(deps, stages=[impact_stage]),
+        JobKind.RUN_TESTS: RunTestsHandler(deps),
     }

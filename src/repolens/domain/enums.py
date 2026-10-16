@@ -116,6 +116,7 @@ class Severity(StrEnum):
 class JobKind(StrEnum):
     ANALYZE_REPOSITORY = "ANALYZE_REPOSITORY"
     ANALYZE_CHANGE = "ANALYZE_CHANGE"
+    RUN_TESTS = "RUN_TESTS"
 
 
 class ChangeSetStatus(StrEnum):

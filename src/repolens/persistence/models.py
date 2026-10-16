@@ -29,7 +29,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from repolens.domain.enums import (
@@ -666,3 +666,100 @@ class TestPlanItem(Base):
     evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     exclusion_reason: Mapped[str | None] = mapped_column(Text)
     estimated_seconds: Mapped[float | None] = mapped_column(Float)
+
+
+RUN_OUTCOMES_SQL = (
+    "'PASSED', 'FAILED', 'TIMED_OUT', 'CANCELLED', 'INFRASTRUCTURE_ERROR', "
+    "'COLLECTION_ERROR', 'SECURITY_POLICY_BLOCKED', 'RESOURCE_LIMIT_EXCEEDED'"
+)
+
+
+class TestRun(Base):
+    """One sandboxed pytest execution against an exact snapshot."""
+
+    __test__ = False
+    __tablename__ = "test_runs"
+    __table_args__ = (
+        CheckConstraint("mode IN ('SELECTED', 'FULL_SUITE', 'COLLECT')", name="mode_valid"),
+        CheckConstraint("status IN ('QUEUED', 'RUNNING', 'COMPLETED')", name="status_valid"),
+        CheckConstraint(
+            f"outcome IS NULL OR outcome IN ({RUN_OUTCOMES_SQL})", name="outcome_valid"
+        ),
+        CheckConstraint(
+            "(status = 'COMPLETED') = (outcome IS NOT NULL)", name="completed_has_outcome"
+        ),
+        CheckConstraint(f"commit_sha {SHA_CHECK}", name="commit_sha_format"),
+        Index(None, "repository_id", "created_at"),
+        Index(None, "plan_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    repository_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False
+    )
+    analysis_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("repository_snapshots.id", ondelete="CASCADE"), nullable=False
+    )
+    commit_sha: Mapped[str] = mapped_column(Text, nullable=False)
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("test_plans.id", ondelete="SET NULL")
+    )
+    mode: Mapped[str] = mapped_column(Text, nullable=False)
+    requested_node_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    coverage: Mapped[bool] = mapped_column(nullable=False, default=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="QUEUED")
+    outcome: Mapped[str | None] = mapped_column(Text)
+    outcome_reason: Mapped[str | None] = mapped_column(Text)
+    pytest_exit_code: Mapped[int | None] = mapped_column(Integer)
+    container_exit_code: Mapped[int | None] = mapped_column(Integer)
+    counts: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    duration_ms: Mapped[float | None] = mapped_column(Float)
+    image: Mapped[str] = mapped_column(Text, nullable=False)
+    limits: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    stdout_tail: Mapped[str | None] = mapped_column(Text)
+    stderr_tail: Mapped[str | None] = mapped_column(Text)
+    output_truncated: Mapped[bool] = mapped_column(nullable=False, default=False)
+    cleanup_ok: Mapped[bool | None] = mapped_column()
+    collected_node_ids: Mapped[list[str] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = _created_at()
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TestResultRecord(Base):
+    __test__ = False
+    __tablename__ = "test_results"
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('PASSED', 'FAILED', 'ERROR', 'SKIPPED')", name="outcome_valid"
+        ),
+        Index(None, "test_run_id"),
+        Index(None, "node_id"),
+    )
+
+    id: Mapped[int] = _bigint_pk()
+    test_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("test_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str] = mapped_column(Text, nullable=False)
+    outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    duration_ms: Mapped[float] = mapped_column(Float, nullable=False)
+    message: Mapped[str | None] = mapped_column(Text)
+
+
+class CoverageRecord(Base):
+    """Lines executed by one test (``test_node_id``) or outside any test (NULL)."""
+
+    __tablename__ = "coverage_records"
+    __table_args__ = (Index(None, "test_run_id", "path"),)
+
+    id: Mapped[int] = _bigint_pk()
+    test_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("test_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    test_node_id: Mapped[str | None] = mapped_column(Text)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    lines: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False)

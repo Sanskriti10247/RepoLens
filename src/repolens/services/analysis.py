@@ -67,6 +67,8 @@ from repolens.services.test_planning import ensure_test_catalog
 log = get_logger(__name__)
 
 ENGINE_VERSION = "1"
+# Runs that own analysis results (REUSED runs point at one of these).
+USABLE_STATUSES = (AnalysisStatus.SUCCEEDED.value, AnalysisStatus.PARTIAL.value)
 MAX_STORED_ISSUES = 500
 _TERMINAL_RUN = {
     AnalysisStatus.SUCCEEDED,
