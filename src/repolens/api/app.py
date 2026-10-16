@@ -18,17 +18,20 @@ from repolens.api.routes import (
     health,
     impact,
     jobs,
+    questions,
     repositories,
     test_plans,
     test_runs,
 )
 from repolens.config import Settings, get_settings
+from repolens.llm.provider import AnswerProvider, AnthropicProvider
 from repolens.observability.logging import configure_logging
 from repolens.persistence.db import make_engine, make_session_factory
 from repolens.repository.git import GitPolicy, GitRunner
 from repolens.repository.mirror import MirrorStore
 from repolens.services.analysis import build_providers, default_analyzer
 from repolens.services.graph import SourceReader
+from repolens.services.questions import QuestionService
 
 
 def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
@@ -58,6 +61,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     # Reads blobs from local mirrors only, so no transport protocol is allowed.
     reader_runner = GitRunner(settings.git_home_dir, GitPolicy(allowed_protocols=()))
     app.state.source_reader = SourceReader(MirrorStore(settings.mirrors_dir, reader_runner))
+    app.state.question_service = QuestionService(app.state.source_reader)
+    app.state.answer_provider = build_answer_provider(settings)
 
     app.middleware("http")(request_context)
     app.add_middleware(
@@ -76,7 +81,21 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(test_plans.router, prefix="/api")
     app.include_router(test_runs.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
+    app.include_router(questions.router, prefix="/api")
     return app
+
+
+def build_answer_provider(settings: Settings) -> AnswerProvider | None:
+    if settings.llm_provider == "anthropic":
+        return AnthropicProvider(
+            model=settings.llm_model,
+            effort=settings.llm_effort,
+            timeout_seconds=settings.llm_timeout_seconds,
+            allow_source=settings.llm_allow_source_upload,
+            max_evidence_chars=settings.llm_max_evidence_chars,
+            min_interval_seconds=settings.llm_min_interval_seconds,
+        )
+    return None
 
 
 def build() -> FastAPI:

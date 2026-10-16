@@ -605,3 +605,39 @@ class QueueMetrics(Schema):
     kinds: list[KindMetrics]
     active_leases: int
     expired_leases: int
+
+
+# -- repository questions ------------------------------------------------------------------
+
+
+class QuestionCreate(BaseModel):
+    question: str = Field(min_length=1, max_length=1000, examples=["Who calls with_tax?"])
+    analysis_id: uuid.UUID | None = None
+    use_model: bool = True
+
+
+class EvidenceOut(Schema):
+    id: str
+    category: str
+    statement: str
+    path: str | None
+    start_line: int | None
+    end_line: int | None
+    symbol_id: int | None
+    qualified_name: str | None
+    text: str | None
+    commit_sha: str
+
+
+class AnswerOut(Schema):
+    question: str
+    intent: str
+    analysis_id: uuid.UUID
+    commit_sha: str
+    mode: str
+    answer_markdown: str
+    model_explanation: str | None
+    model_note: str | None
+    insufficient_evidence: bool
+    matched_symbols: list[str]
+    evidence: list[EvidenceOut]

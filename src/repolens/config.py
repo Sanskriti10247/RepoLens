@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -65,6 +66,16 @@ class Settings(BaseSettings):
     sandbox_pids: int = Field(default=256, ge=16)
     sandbox_timeout_seconds: float = Field(default=600.0, gt=0)
     sandbox_workspace_mb: int = Field(default=1024, ge=16)
+
+    # Optional model provider for repository questions. Off by default; core analysis never
+    # depends on it. Source snippets are sent only if llm_allow_source_upload is true.
+    llm_provider: Literal["none", "anthropic"] = "none"
+    llm_model: str = "claude-opus-5-5"
+    llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    llm_timeout_seconds: float = Field(default=60.0, gt=0)
+    llm_allow_source_upload: bool = False
+    llm_max_evidence_chars: int = Field(default=40_000, ge=1000)
+    llm_min_interval_seconds: float = Field(default=1.0, ge=0)
 
     @property
     def mirrors_dir(self) -> Path:

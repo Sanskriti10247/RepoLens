@@ -21,6 +21,11 @@ dependencies = [
 repolens-api = "repolens.api.__main__:main"
 repolens-worker = "repolens.worker.__main__:main"
 
+[project.optional-dependencies]
+llm = [
+    "anthropic>=1.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1",
