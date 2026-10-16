@@ -73,7 +73,8 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["tree_sitter_python", "docker.*", "networkx.*"]
+# anthropic is an optional extra ([llm]); CI type-checks without it installed.
+module = ["tree_sitter_python", "docker.*", "networkx.*", "anthropic", "anthropic.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
