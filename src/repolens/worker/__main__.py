@@ -6,8 +6,10 @@ from datetime import timedelta
 from types import FrameType
 
 from repolens.config import get_settings
+from repolens.domain.enums import JobKind
 from repolens.observability.logging import configure_logging, get_logger
 from repolens.persistence.db import make_engine, make_session_factory
+from repolens.persistence.jobs import ClaimLimits
 from repolens.services.execution import cleanup_stale_execution
 from repolens.worker.handlers import build_handlers
 from repolens.worker.runtime import Worker
@@ -23,6 +25,10 @@ def main() -> None:
         session_factory,
         build_handlers(settings),
         lease=timedelta(seconds=settings.job_lease_seconds),
+        limits=ClaimLimits(
+            per_repository=settings.max_jobs_per_repository,
+            per_kind={JobKind.RUN_TESTS: settings.max_concurrent_sandboxes},
+        ),
     )
     stop = threading.Event()
 

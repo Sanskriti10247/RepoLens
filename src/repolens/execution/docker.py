@@ -152,7 +152,7 @@ class DockerSandbox:
                     os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait()
         state = self._inspect(request.name)
-        cleanup_ok = self._remove(request.name)
+        cleanup_ok = self.remove(request.name)
         stderr_text = bytes(stderr[-8192:]).decode("utf-8", errors="replace")
         if state is None and proc.returncode == 125:
             raise SandboxUnavailable(f"container failed to start: {stderr_text.strip()[-500:]}")
@@ -228,7 +228,7 @@ class DockerSandbox:
             return None
         return state
 
-    def _remove(self, name: str) -> bool:
+    def remove(self, name: str) -> bool:
         try:
             result = self._docker("rm", "--force", "--volumes", name)
         except (subprocess.TimeoutExpired, OSError):
@@ -254,7 +254,7 @@ class DockerSandbox:
             name, _, created = line.partition("\t")
             created_at = _parse_docker_time(created)
             stale = created_at is not None and now - created_at > older_than_seconds
-            if stale and self._remove(name):
+            if stale and self.remove(name):
                 removed.append(name)
         return removed
 

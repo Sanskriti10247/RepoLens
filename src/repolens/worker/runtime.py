@@ -75,6 +75,7 @@ class Worker:
         retry_backoff: timedelta = timedelta(seconds=10),
         poll_interval: float = 1.0,
         recovery_interval: float = 15.0,
+        limits: queue.ClaimLimits | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.handlers = dict(handlers)
@@ -83,6 +84,7 @@ class Worker:
         self.retry_backoff = retry_backoff
         self.poll_interval = poll_interval
         self.recovery_interval = recovery_interval
+        self.limits = limits
         self._last_recovery = 0.0
 
     # -- public API ---------------------------------------------------------------------
@@ -116,7 +118,9 @@ class Worker:
 
     def run_once(self) -> bool:
         with transaction(self.session_factory) as session:
-            claimed = queue.claim(session, self.worker_id, self.lease, kinds=list(self.handlers))
+            claimed = queue.claim(
+                session, self.worker_id, self.lease, kinds=list(self.handlers), limits=self.limits
+            )
         if claimed is None:
             return False
         self._execute(claimed)
@@ -140,7 +144,7 @@ class Worker:
                 log.warning("job_start_lost_lease")
                 clear_context()
                 return
-        log.info("job_started", attempt=job.attempts)
+        log.info("job_started", attempt=job.attempts, queue_wait_ms=job.queue_wait_ms)
         done = threading.Event()
         beat = threading.Thread(target=self._heartbeat, args=(ctx, done), daemon=True)
         beat.start()

@@ -13,17 +13,18 @@ Concurrency model:
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, case, func, select, text, update
+from sqlalchemy import and_, case, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from repolens.domain.enums import JobKind, JobStatus
 from repolens.domain.jobs import ACTIVE_JOB_STATUSES, TERMINAL_JOB_STATUSES, sources_for
-from repolens.persistence.models import JOB_NOT_TERMINAL_SQL, Job
+from repolens.persistence.models import JOB_NOT_TERMINAL_SQL, Job, Repository
 
 _ACTIVE = [s.value for s in ACTIVE_JOB_STATUSES]
 _NON_TERMINAL = [JobStatus.QUEUED.value, *_ACTIVE]
@@ -39,6 +40,7 @@ class ClaimedJob:
     attempts: int
     max_attempts: int
     lease_expires_at: datetime
+    queue_wait_ms: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,55 +103,129 @@ def enqueue(
     return existing, False
 
 
+@dataclass(frozen=True, slots=True)
+class ClaimLimits:
+    """Concurrency limits enforced at claim time (``None`` = unlimited)."""
+
+    per_repository: int | None = None
+    per_kind: Mapping[JobKind, int] = field(default_factory=dict)
+
+    @property
+    def active(self) -> bool:
+        return self.per_repository is not None or bool(self.per_kind)
+
+
+_RETURNING = (
+    Job.id,
+    Job.kind,
+    Job.payload,
+    Job.repository_id,
+    Job.subject_id,
+    Job.attempts,
+    Job.max_attempts,
+    Job.lease_expires_at,
+    (func.extract("epoch", func.now() - Job.created_at) * 1000).label("queue_wait_ms"),
+)
+MAX_CLAIM_CANDIDATES = 20
+
+
 def claim(
     session: Session,
     worker_id: str,
     lease: timedelta,
     kinds: list[JobKind] | None = None,
+    limits: ClaimLimits | None = None,
 ) -> ClaimedJob | None:
-    candidate = (
-        select(Job.id)
+    """Claim the next eligible job, respecting concurrency limits.
+
+    Limits are checked *after* taking a lock that serialises competing claims (an advisory
+    lock per job kind, a row lock on the repository), so two workers can never both see
+    "one slot left" and exceed the limit. Candidates over a limit are skipped in favour of
+    the next eligible job rather than blocking the queue.
+    """
+    excluded_kinds: set[str] = set()
+    excluded_repos: set[uuid.UUID] = set()
+    for _ in range(MAX_CLAIM_CANDIDATES):
+        candidate = _next_candidate(session, kinds, excluded_kinds, excluded_repos)
+        if candidate is None:
+            return None
+        job_id, kind, repository_id = candidate
+        if limits is not None and limits.active:
+            limit = limits.per_kind.get(JobKind(kind))
+            if limit is not None:
+                session.execute(
+                    select(func.pg_advisory_xact_lock(func.hashtext(f"repolens:kind:{kind}")))
+                )
+                if _active_count(session, Job.kind == kind) >= limit:
+                    excluded_kinds.add(kind)
+                    continue
+            if limits.per_repository is not None and repository_id is not None:
+                session.execute(
+                    select(Repository.id).where(Repository.id == repository_id).with_for_update()
+                )
+                if _active_count(session, Job.repository_id == repository_id) >= (
+                    limits.per_repository
+                ):
+                    excluded_repos.add(repository_id)
+                    continue
+        row = session.execute(
+            update(Job)
+            .where(Job.id == job_id, Job.status == JobStatus.QUEUED.value)
+            .values(
+                status=JobStatus.CLAIMED.value,
+                lease_owner=worker_id,
+                lease_expires_at=func.now() + lease,
+                heartbeat_at=func.now(),
+                claimed_at=func.now(),
+                attempts=Job.attempts + 1,
+            )
+            .returning(*_RETURNING)
+        ).one_or_none()
+        if row is not None:
+            return ClaimedJob(
+                id=row.id,
+                kind=JobKind(row.kind),
+                payload=row.payload,
+                repository_id=row.repository_id,
+                subject_id=row.subject_id,
+                attempts=row.attempts,
+                max_attempts=row.max_attempts,
+                lease_expires_at=row.lease_expires_at,
+                queue_wait_ms=round(float(row.queue_wait_ms), 1),
+            )
+    return None
+
+
+def _next_candidate(
+    session: Session,
+    kinds: list[JobKind] | None,
+    excluded_kinds: set[str],
+    excluded_repos: set[uuid.UUID],
+) -> tuple[uuid.UUID, str, uuid.UUID | None] | None:
+    stmt = (
+        select(Job.id, Job.kind, Job.repository_id)
         .where(Job.status == JobStatus.QUEUED.value, Job.run_after <= func.now())
         .order_by(Job.priority, Job.run_after, Job.created_at)
         .limit(1)
         .with_for_update(skip_locked=True)
     )
     if kinds:
-        candidate = candidate.where(Job.kind.in_([k.value for k in kinds]))
-    row = session.execute(
-        update(Job)
-        .where(Job.id == candidate.scalar_subquery(), Job.status == JobStatus.QUEUED.value)
-        .values(
-            status=JobStatus.CLAIMED.value,
-            lease_owner=worker_id,
-            lease_expires_at=func.now() + lease,
-            heartbeat_at=func.now(),
-            claimed_at=func.now(),
-            attempts=Job.attempts + 1,
+        stmt = stmt.where(Job.kind.in_([k.value for k in kinds]))
+    if excluded_kinds:
+        stmt = stmt.where(Job.kind.not_in(sorted(excluded_kinds)))
+    if excluded_repos:
+        stmt = stmt.where(
+            or_(Job.repository_id.is_(None), Job.repository_id.not_in(sorted(excluded_repos)))
         )
-        .returning(
-            Job.id,
-            Job.kind,
-            Job.payload,
-            Job.repository_id,
-            Job.subject_id,
-            Job.attempts,
-            Job.max_attempts,
-            Job.lease_expires_at,
-        )
-    ).one_or_none()
-    if row is None:
-        return None
-    return ClaimedJob(
-        id=row.id,
-        kind=JobKind(row.kind),
-        payload=row.payload,
-        repository_id=row.repository_id,
-        subject_id=row.subject_id,
-        attempts=row.attempts,
-        max_attempts=row.max_attempts,
-        lease_expires_at=row.lease_expires_at,
-    )
+    row = session.execute(stmt).one_or_none()
+    return None if row is None else (row.id, row.kind, row.repository_id)
+
+
+def _active_count(session: Session, condition: Any) -> int:
+    count: int = session.execute(
+        select(func.count()).select_from(Job).where(Job.status.in_(_ACTIVE), condition)
+    ).scalar_one()
+    return count
 
 
 def _held_by(job_id: uuid.UUID, worker_id: str) -> Any:
@@ -340,6 +416,7 @@ def _truncate(detail: str | None, limit: int = 4000) -> str | None:
 
 
 __all__ = [
+    "ClaimLimits",
     "ClaimedJob",
     "HeartbeatResult",
     "RecoveredJob",

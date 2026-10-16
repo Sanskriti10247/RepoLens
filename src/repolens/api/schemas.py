@@ -567,3 +567,41 @@ class CoverageSummary(Schema):
         "Coverage records lines executed by the tests in this run. It is evidence of execution, "
         "not proof that behaviour was verified."
     )
+
+
+# -- jobs and queue metrics ----------------------------------------------------------------
+
+
+class JobDetailOut(JobOut):
+    kind: str
+    repository_id: uuid.UUID | None
+    subject_id: uuid.UUID | None
+    priority: int
+    lease_owner: str | None
+    lease_expires_at: datetime | None
+    heartbeat_at: datetime | None
+    claimed_at: datetime | None
+    run_after: datetime
+
+
+class JobPage(Schema):
+    items: list[JobDetailOut]
+    page: PageMeta
+
+
+class KindMetrics(Schema):
+    kind: str
+    by_status: dict[str, int]
+    completed_last_24h: int
+    median_queue_wait_ms: float | None
+    p95_queue_wait_ms: float | None
+    median_run_ms: float | None
+    p95_run_ms: float | None
+    retried_jobs: int
+    failure_categories: dict[str, int]
+
+
+class QueueMetrics(Schema):
+    kinds: list[KindMetrics]
+    active_leases: int
+    expired_leases: int

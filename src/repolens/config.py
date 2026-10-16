@@ -54,6 +54,8 @@ class Settings(BaseSettings):
 
     # Worker
     job_lease_seconds: int = Field(default=60, ge=5)
+    max_jobs_per_repository: int = Field(default=2, ge=1)
+    max_concurrent_sandboxes: int = Field(default=2, ge=1)
 
     # Sandboxed test execution (Docker). Only the configured image may be used.
     sandbox_image: str = "repolens-sandbox:py3.12-1"

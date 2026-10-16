@@ -17,6 +17,7 @@ from repolens.api.routes import (
     graph,
     health,
     impact,
+    jobs,
     repositories,
     test_plans,
     test_runs,
@@ -74,6 +75,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(impact.router, prefix="/api")
     app.include_router(test_plans.router, prefix="/api")
     app.include_router(test_runs.router, prefix="/api")
+    app.include_router(jobs.router, prefix="/api")
     return app
 
 

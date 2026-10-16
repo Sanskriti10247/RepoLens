@@ -344,10 +344,13 @@ class RunTestsHandler:
                 return "cancelled"
             return None
 
+        name = f"repolens-run-{run_id}"
+        # A previous attempt may have left its container behind (worker crash, lost lease).
+        self.sandbox.remove(name)
         try:
             return self.sandbox.run(
                 SandboxRequest(
-                    name=f"repolens-run-{run_id}",
+                    name=name,
                     image=spec["image"],
                     source_dir=source,
                     arguments=arguments,
