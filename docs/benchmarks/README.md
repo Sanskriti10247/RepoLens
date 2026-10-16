@@ -132,9 +132,11 @@ run: container create, interpreter start and pytest collection of one test.
 
 - **One machine, one run per figure, a shared laptop.** These are indicative numbers, not a
   controlled study.
-- **Impact jobs fetch from GitHub again even when both commits are already in the mirror.**
-  That fetch makes up most of the impact wall time above (3–14 s). Skipping it when both SHAs
-  are present is an obvious improvement that has not been made yet.
+- **In these measurements, impact jobs fetched from GitHub even though both commits were
+  already in the mirror.** That fetch makes up most of the impact wall time above (3–14 s).
+  Impact jobs now skip the fetch when both refs are full commit ids already mirrored, and
+  record `fetch_skipped` in their timings. Branch and tag names still fetch, because they can
+  move. These numbers have not been re-measured since that change.
 - **The only selection-safety measurement is the fixture.** On real repositories, safety rests
   on the conservative fallbacks. No study has yet replayed historical failing commits.
 - **Coverage-based evidence was not measured.** It needs an earlier sandboxed run with

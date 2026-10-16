@@ -163,3 +163,27 @@ def test_validation_and_cancellation(
     cancelled = client.post(f"/api/impact/{change['id']}/cancel", headers=AUTH).json()
     assert cancelled["status"] == "CANCELLED"
     assert not worker.run_once()
+
+
+def test_mirrored_commits_are_compared_without_fetching(
+    client: TestClient, worker: Worker, two_commits: tuple[FixtureRepo, str, str]
+) -> None:
+    repo, base, target = two_commits
+    repo_id = register(client, repo.url)["id"]
+    first = _impact(client, repo_id, base, "main")  # a branch name: must fetch
+    assert worker.run_once()
+    assert "fetch_skipped" not in client.get(f"/api/impact/{first['id']}").json()["timings_ms"]
+
+    newer = repo.commit("newer", {"shop/util2.py": "X = 1\n"})
+    again = _impact(client, repo_id, base, target)  # both commits already mirrored
+    assert worker.run_once()
+    done = client.get(f"/api/impact/{again['id']}").json()
+    assert done["status"] == "SUCCEEDED", done
+    assert done["timings_ms"]["fetch_skipped"] == 1
+
+    unknown = _impact(client, repo_id, target, newer)  # newer is not mirrored yet
+    assert worker.run_once()
+    done = client.get(f"/api/impact/{unknown['id']}").json()
+    assert done["status"] == "SUCCEEDED", done
+    assert "fetch_skipped" not in done["timings_ms"]
+    assert done["target_sha"] == newer

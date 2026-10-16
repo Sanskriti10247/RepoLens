@@ -52,7 +52,8 @@ from repolens.persistence.models import (
     Symbol,
 )
 from repolens.repository.git import BlobReader, GitError, GitOutputLimitExceeded
-from repolens.repository.validation import ValidationError, validate_ref
+from repolens.repository.mirror import ResolvedRevision, RevisionAmbiguous, RevisionNotFound
+from repolens.repository.validation import ValidationError, is_full_sha, validate_ref
 from repolens.services.analysis import AnalysisPipeline, IngestionDeps
 from repolens.services.errors import InvalidInput, NotFound
 from repolens.services.jobs import JobContext, PermanentJobError
@@ -181,10 +182,12 @@ class AnalyzeChangeHandler:
             base_ref, target_ref = change.base_ref, change.target_ref
 
         started = time.perf_counter()
-        mirror, default_branch = self.pipeline.prepare_mirror(ctx, repo_id, provider, url)
-        base = self.pipeline.resolve(mirror, base_ref, default_branch)
-        target = self.pipeline.resolve(mirror, target_ref, default_branch)
+        mirror, base, target, fetched = self._revisions(
+            ctx, repo_id, provider, url, base_ref, target_ref
+        )
         timings["fetch_ms"] = _ms(started)
+        if not fetched:
+            timings["fetch_skipped"] = 1
 
         started = time.perf_counter()
         base_run = self.pipeline.ensure_analysis(ctx, repo_id, mirror, base)
@@ -225,6 +228,35 @@ class AnalyzeChangeHandler:
             change.status = ChangeSetStatus.SUCCEEDED
             change.finished_at = func.now()
         return {"base_sha": base.commit_sha, "target_sha": target.commit_sha, **summary}
+
+    def _revisions(
+        self,
+        ctx: JobContext,
+        repo_id: uuid.UUID,
+        provider: str,
+        url: str,
+        base_ref: str,
+        target_ref: str,
+    ) -> tuple[Path, ResolvedRevision, ResolvedRevision, bool]:
+        """Resolve both refs, fetching first unless both are commit ids already mirrored.
+
+        Commits are immutable, so fetching again cannot change what a full SHA names.
+        """
+        if is_full_sha(base_ref) and is_full_sha(target_ref):
+            mirrors = self.deps.mirrors
+            with mirrors.locked(repo_id) as mirror:
+                if (mirror / "HEAD").exists():
+                    try:
+                        base = mirrors.resolve(mirror, base_ref, default_branch=None)
+                        target = mirrors.resolve(mirror, target_ref, default_branch=None)
+                    except (RevisionNotFound, RevisionAmbiguous):
+                        pass
+                    else:
+                        return mirror, base, target, False
+        mirror, default_branch = self.pipeline.prepare_mirror(ctx, repo_id, provider, url)
+        base = self.pipeline.resolve(mirror, base_ref, default_branch)
+        target = self.pipeline.resolve(mirror, target_ref, default_branch)
+        return mirror, base, target, True
 
 
 # -- diff and mapping -----------------------------------------------------------------------
