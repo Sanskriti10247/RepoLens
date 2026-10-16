@@ -143,3 +143,17 @@ def test_run_coverage(run_id: uuid.UUID, session: SessionDep) -> CoverageSummary
         for path, tests, lines in rows
     ]
     return CoverageSummary(test_run_id=run_id, files=files)
+
+
+@router.post(
+    "/analyses/{analysis_id}/collect",
+    response_model=TestRunOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Authorized],
+)
+def collect_tests(analysis_id: uuid.UUID, session: SessionDep, settings: SettingsDep) -> TestRunOut:
+    """Run ``pytest --collect-only`` in the sandbox to confirm the statically discovered tests."""
+    with session.begin():
+        run, _ = execution.request_collection(session, settings, analysis_id)
+        run_id = run.id
+    return _run_out(session, _run(session, run_id))

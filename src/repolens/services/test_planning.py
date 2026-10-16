@@ -121,9 +121,25 @@ def create_test_plan(
 
     run_id = change.target_run_id
     catalog = ensure_test_catalog(session, run_id)
+    statuses = dict(
+        session.execute(
+            select(TestCaseRecord.node_id, TestCaseRecord.collection_status).where(
+                TestCaseRecord.analysis_run_id == run_id
+            )
+        ).all()
+    )
+    # After sandboxed collection, tests pytest would not collect cannot be selected.
+    not_collected = sorted(n for n, s in statuses.items() if s == "NOT_COLLECTED")
+    catalog = [t for t in catalog if statuses.get(t.node_id) != "NOT_COLLECTED"]
     by_qualified = {t.qualified_name: t for t in catalog}
     evidence: dict[str, list[Evidence]] = defaultdict(list)
-    sources = {"static_graph": True, "coverage": False, "history": False}
+    sources = {
+        "static_graph": True,
+        "collection": any(s == "COLLECTED" for s in statuses.values()),
+        "coverage": False,
+        "history": False,
+        "excluded_not_collected": not_collected[:100],
+    }
 
     items = list(
         session.execute(select(ImpactItem).where(ImpactItem.report_id == report.id)).scalars()

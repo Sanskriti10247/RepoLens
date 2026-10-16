@@ -143,6 +143,42 @@ def request_test_run(
     return test_run, job_id
 
 
+def request_collection(
+    session: Session, settings: Settings, analysis_id: uuid.UUID
+) -> tuple[TestRun, uuid.UUID]:
+    """Queue sandboxed ``pytest --collect-only`` (collection imports repository code)."""
+    if session.get(AnalysisRun, analysis_id) is None:
+        raise NotFound("Analysis not found")
+    analysis = session.get(AnalysisRun, effective_run_id(session, analysis_id))
+    if analysis is None or analysis.snapshot_id is None or analysis.status not in USABLE_STATUSES:
+        raise InvalidInput("The analysis has no usable results", code="analysis_not_ready")
+    snapshot = session.get(RepositorySnapshot, analysis.snapshot_id)
+    assert snapshot is not None  # noqa: S101 - FK
+    test_run = TestRun(
+        id=uuid.uuid4(),
+        repository_id=analysis.repository_id,
+        analysis_run_id=analysis.id,
+        snapshot_id=snapshot.id,
+        commit_sha=snapshot.commit_sha,
+        mode="COLLECT",
+        requested_node_ids=[],
+        coverage=False,
+        status="QUEUED",
+        image=settings.sandbox_image,
+        limits=_limits_json(sandbox_limits(settings)),
+    )
+    session.add(test_run)
+    session.flush()
+    job_id, _ = queue.enqueue(
+        session,
+        JobKind.RUN_TESTS,
+        repository_id=analysis.repository_id,
+        subject_id=test_run.id,
+        max_attempts=2,
+    )
+    return test_run, job_id
+
+
 def cancel_test_run(session: Session, run_id: uuid.UUID) -> None:
     if session.get(TestRun, run_id) is None:
         raise NotFound("Test run not found")
@@ -224,6 +260,7 @@ class RunTestsHandler:
                 "coverage": test_run.coverage,
                 "image": test_run.image,
                 "analysis_run_id": test_run.analysis_run_id,
+                "mode": test_run.mode,
             }
 
         self._check_policy(spec)
@@ -294,8 +331,8 @@ class RunTestsHandler:
     def _execute(
         self, ctx: JobContext, run_id: uuid.UUID, spec: dict[str, Any], source: Path
     ) -> Any:
-        arguments = ["run"]
-        if spec["coverage"]:
+        arguments = ["collect"] if spec["mode"] == "COLLECT" else ["run"]
+        if spec["coverage"] and spec["mode"] != "COLLECT":
             arguments.append("--coverage")
         if spec["node_ids"]:
             arguments += ["--", *spec["node_ids"]]
@@ -355,6 +392,9 @@ class RunTestsHandler:
             )
         if rows:
             session.execute(insert(TestResultRecord), rows)
+        collected: list[str] | None = None
+        if spec["mode"] == "COLLECT" and classification.outcome is RunOutcome.PASSED:
+            collected = _record_collection(session, spec["analysis_run_id"], result.envelope)
         coverage_rows = _coverage_rows(run_id, result.envelope, session, spec["analysis_run_id"])
         if coverage_rows:
             session.execute(insert(CoverageRecord), coverage_rows)
@@ -377,9 +417,41 @@ class RunTestsHandler:
                 ),
                 output_truncated=result.output_truncated,
                 cleanup_ok=result.cleanup_ok,
+                collected_node_ids=collected,
                 finished_at=func.now(),
             )
         )
+
+
+def _record_collection(
+    session: Session, analysis_run_id: uuid.UUID, envelope: dict[str, Any] | None
+) -> list[str]:
+    """Reconcile the static catalog with what pytest actually collected."""
+    raw = (envelope or {}).get("collected") or []
+    collected = sorted({str(n) for n in raw if isinstance(n, str) and "::" in n})[:50_000]
+    bases = {n.split("[", 1)[0] for n in collected}
+    cases = list(
+        session.execute(
+            select(TestCaseRecord).where(TestCaseRecord.analysis_run_id == analysis_run_id)
+        ).scalars()
+    )
+    known = {case.node_id for case in cases}
+    for case in cases:
+        case.collection_status = "COLLECTED" if case.node_id in bases else "NOT_COLLECTED"
+    for node_id in sorted(bases - known):
+        path = node_id.split("::", 1)[0]
+        session.add(
+            TestCaseRecord(
+                analysis_run_id=analysis_run_id,
+                symbol_id=None,
+                node_id=node_id,
+                path=path,
+                qualified_name=node_id,
+                collection_status="COLLECTED",
+            )
+        )
+    session.flush()
+    return collected
 
 
 def _synthesise(classname: str, name: str) -> str:

@@ -14,7 +14,7 @@ from repolens.config import Settings
 from repolens.execution.docker import DockerSandbox
 from repolens.worker.handlers import build_handlers
 from repolens.worker.runtime import Worker
-from tests.integration.conftest import AUTH, run_change
+from tests.integration.conftest import AUTH, analyze, register, run_change
 from tests.support import projects
 from tests.support.gitrepo import FixtureRepo
 
@@ -142,3 +142,29 @@ def test_cancel_and_validation(client: TestClient, worker: Worker, inventory: Fi
     cancelled = client.post(f"/api/test-runs/{queued['id']}/cancel", headers=AUTH).json()
     assert cancelled["outcome"] == "CANCELLED" and cancelled["status"] == "COMPLETED"
     assert not worker.run_once()
+
+
+def test_sandboxed_collection_reconciles_catalog(
+    client: TestClient, worker: Worker, tmp_path: Any
+) -> None:
+    repo = FixtureRepo(tmp_path / "repos" / "collect")
+    files = dict(projects.INVENTORY)
+    # A parametrized test (statically one test) and a test hidden behind a helper decorator.
+    files["tests/test_param.py"] = (
+        "import pytest\n\n\n@pytest.mark.parametrize('x', [1, 2])\ndef test_p(x):\n    assert x\n"
+    )
+    files["tests/test_skipped_file.py"] = "collect_ignore = True\n\n\ndef helper():\n    pass\n"
+    repo.commit("base", files)
+    repo_id = register(client, repo.url)["id"]
+    analysis = analyze(client, repo_id)
+    assert worker.run_once()
+    response = client.post(f"/api/analyses/{analysis['id']}/collect", headers=AUTH)
+    assert response.status_code == 202, response.text
+    assert worker.run_once()
+    run = client.get(f"/api/test-runs/{response.json()['id']}").json()
+    assert run["outcome"] == "PASSED" and run["mode"] == "COLLECT", run
+    tests = client.get(f"/api/analyses/{analysis['id']}/tests", params={"limit": 100}).json()
+    statuses = {t["node_id"]: t["collection_status"] for t in tests["items"]}
+    assert statuses["tests/test_param.py::test_p"] == "COLLECTED"
+    assert statuses["tests/test_util.py::test_slugify"] == "COLLECTED"
+    assert set(statuses.values()) == {"COLLECTED"}
