@@ -15,12 +15,15 @@ const FORWARDED_RESPONSE_HEADERS = ["content-type", "x-request-id", "cache-contr
 export interface ProxyConfig {
   apiBaseUrl: string;
   apiToken: string | undefined;
+  /** Honour X-Forwarded-Host. Enable only behind a reverse proxy that sets it. */
+  trustForwardedHost?: boolean;
 }
 
 export function proxyConfigFromEnv(): ProxyConfig {
   return {
     apiBaseUrl: process.env.REPOLENS_API_URL ?? "http://127.0.0.1:8100",
     apiToken: process.env.REPOLENS_API_TOKEN || undefined,
+    trustForwardedHost: process.env.REPOLENS_TRUST_FORWARDED_HOST === "true",
   };
 }
 
@@ -28,12 +31,13 @@ function errorResponse(status: number, code: string, message: string): Response 
   return Response.json({ error: { code, message, request_id: null, details: null } }, { status });
 }
 
-export function isSameOrigin(request: Request): boolean {
+export function isSameOrigin(request: Request, trustForwardedHost = false): boolean {
   const origin = request.headers.get("origin");
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin") return false;
   if (!origin) return fetchSite === "same-origin";
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const forwarded = trustForwardedHost ? request.headers.get("x-forwarded-host") : null;
+  const host = forwarded ?? request.headers.get("host");
   try {
     return new URL(origin).host === host;
   } catch {
@@ -53,7 +57,7 @@ export async function forward(
   const method = request.method.toUpperCase();
   const mutating = !SAFE_METHODS.has(method);
   if (mutating) {
-    if (!isSameOrigin(request)) {
+    if (!isSameOrigin(request, config.trustForwardedHost)) {
       return errorResponse(403, "cross_origin_blocked", "Cross-origin request rejected");
     }
     const contentType = request.headers.get("content-type") ?? "";

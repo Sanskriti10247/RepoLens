@@ -38,6 +38,20 @@ Settings come from `REPOLENS_*` environment variables, or `.env` (see
 
 ## Security-relevant operating facts
 
+- **Anyone who can reach the web app acts as the operator.** The web proxy adds the API token
+  to every same-origin mutation, and RepoLens has no user accounts. A visitor can therefore:
+  - register repositories;
+  - queue analyses and sandboxed test runs, which use CPU and Docker;
+  - when a model provider is enabled, ask model-backed questions, which spend API credit.
+
+  Keep the web app on `127.0.0.1`. To share it, put an authenticating reverse proxy in front
+  of it (SSO, or at least basic auth). The CSRF check only stops cross-site requests from
+  browsers; it does not authenticate anyone.
+- **Behind a reverse proxy, set `REPOLENS_TRUST_FORWARDED_HOST=true` for the web app.** Do this
+  only if the proxy sets `X-Forwarded-Host` itself. Otherwise the header is ignored.
+- **Read endpoints are open.** This includes job details such as error messages and worker ids
+  (hostname and process id). Do not expose the API port directly.
+
 - **The worker can run containers, which makes it root-equivalent on the host.** Run workers
   on a host, or in a VM, dedicated to RepoLens. The sandbox restrictions limit what
   *repository code* can do. They do not protect the host from a compromised worker process.

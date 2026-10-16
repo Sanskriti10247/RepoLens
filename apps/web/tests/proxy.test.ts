@@ -82,6 +82,13 @@ describe("isSameOrigin", () => {
     expect(isSameOrigin(request)).toBe(false);
   });
 
+  it("ignores X-Forwarded-Host unless trusted", () => {
+    const headers = { origin: "http://evil.example", host: "localhost:3100", "x-forwarded-host": "evil.example" };
+    const request = () => new Request("http://localhost:3100/api/x", { method: "POST", headers });
+    expect(isSameOrigin(request())).toBe(false);
+    expect(isSameOrigin(request(), true)).toBe(true);
+  });
+
   it("rejects requests without any origin information", () => {
     expect(isSameOrigin(new Request("http://localhost:3100/api/x", { method: "POST" }))).toBe(false);
   });
