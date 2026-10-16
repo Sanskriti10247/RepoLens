@@ -9,7 +9,33 @@ tests that exercise the affected code, and run them in a restricted container.
 
 ## What works today
 
-- Project scaffolding, tooling and health endpoints.
+- **Repository ingestion** of public GitHub repositories (`https://github.com/<owner>/<repo>`):
+  a background worker fetches a bare mirror with a hardened Git configuration, resolves the
+  requested branch, tag or commit to a full SHA, and records an immutable snapshot (file
+  inventory, content hashes, languages, unsafe-path findings). Repository code is never run.
+- **Python code intelligence** with Tree-sitter: modules, classes, functions, methods, nested
+  definitions, decorators, imports, calls, base classes and callback references, with exact
+  source spans. Syntax errors are contained to the affected region.
+- **Static name resolution** across the repository. Every reference is stored with an explicit
+  status — `RESOLVED`, `AMBIGUOUS`, `EXTERNAL`, `UNRESOLVED` or `DYNAMIC` — and the rule that
+  produced it. Unknown relationships are reported, not guessed.
+- **Typed dependency graph** in PostgreSQL (`CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`,
+  `REFERENCES`) with provenance and confidence (`EXACT` or `HEURISTIC`).
+- **Graph API**: symbol search and detail (callers, callees, dependents, unresolved references),
+  bounded neighbourhood traversal, shortest dependency paths, module dependency summary with
+  import cycles, statistics, per-file analysis status, warnings and source at the analysed commit.
+
+Not yet implemented: change-impact analysis, test selection, sandboxed test execution,
+repository questions and most of the web interface. See the API documentation at
+`/api/docs` for the current surface.
+
+### Known analysis limits
+
+Python is dynamic. RepoLens does not infer the types of variables or return values, so calls on
+instance attributes (`self.client.get()`) or on values returned by other calls are reported as
+unresolved. `getattr`, `importlib`, `eval` and subscripted calls are reported as dynamic.
+Method calls through `self`, `cls` and `super()` use an approximate method resolution order and
+are marked heuristic, with additional heuristic edges to overrides in known subclasses.
 
 ## Development
 
