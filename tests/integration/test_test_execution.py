@@ -168,3 +168,27 @@ def test_sandboxed_collection_reconciles_catalog(
     assert statuses["tests/test_param.py::test_p"] == "COLLECTED"
     assert statuses["tests/test_util.py::test_slugify"] == "COLLECTED"
     assert set(statuses.values()) == {"COLLECTED"}
+
+
+def test_coverage_and_history_strengthen_selection(
+    client: TestClient, worker: Worker, inventory: FixtureRepo
+) -> None:
+    impact_id = run_change(client, worker, inventory, projects.CHANGE_ITEM_TOTAL)
+    base_run = client.get(f"/api/impact/{impact_id}").json()["base_run_id"]
+    baseline = execute(client, worker, analysis_id=base_run, full_suite=True)
+    assert baseline["outcome"] == "PASSED"
+
+    test_plan = plan(client, impact_id)
+    assert test_plan["evidence_sources"]["coverage"] is True
+    assert test_plan["evidence_sources"]["history"] is True
+    items = client.get(f"/api/test-plans/{test_plan['id']}/items", params={"limit": 100}).json()
+    by_node = {i["node_id"]: i for i in items["items"]}
+    quote = by_node["tests/test_pricing.py::test_quote"]
+    kinds = {e["kind"] for e in quote["evidence"]}
+    # Statically only heuristic (unresolved item.total call); coverage observed the execution.
+    assert "COVERAGE" in kinds
+    coverage = next(e for e in quote["evidence"] if e["kind"] == "COVERAGE")
+    assert 7 in coverage["lines"]["inventory/models.py"]  # `return self.price * qty`
+    assert quote["score"] >= 85
+    assert by_node["tests/test_util.py::test_slugify"]["selected"] is False
+    assert test_plan["estimated_seconds"] is not None  # durations measured in the baseline

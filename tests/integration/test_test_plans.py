@@ -68,7 +68,13 @@ def test_targeted_selection_with_evidence(
         "inventory.reports.summary",
     ]
     assert items["tests/test_util.py::test_slugify"]["exclusion_reason"] == "NO_EVIDENCE"
-    assert plan["evidence_sources"] == {"static_graph": True, "coverage": False, "history": False}
+    assert plan["evidence_sources"] == {
+        "static_graph": True,
+        "collection": False,
+        "coverage": False,
+        "history": False,
+        "excluded_not_collected": [],
+    }
 
 
 def test_broad_scope_adds_module_dependency_evidence(
