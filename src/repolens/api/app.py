@@ -12,11 +12,14 @@ from sqlalchemy import Engine
 import repolens
 from repolens.api.errors import install_error_handlers
 from repolens.api.middleware import request_context
-from repolens.api.routes import analyses, health, repositories
+from repolens.api.routes import analyses, graph, health, repositories
 from repolens.config import Settings, get_settings
 from repolens.observability.logging import configure_logging
 from repolens.persistence.db import make_engine, make_session_factory
+from repolens.repository.git import GitPolicy, GitRunner
+from repolens.repository.mirror import MirrorStore
 from repolens.services.analysis import build_providers, default_analyzer
+from repolens.services.graph import SourceReader
 
 
 def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
@@ -43,6 +46,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.state.session_factory = make_session_factory(db_engine)
     app.state.providers = list(build_providers(settings).values())
     app.state.parser_version = default_analyzer(settings).version
+    # Reads blobs from local mirrors only, so no transport protocol is allowed.
+    reader_runner = GitRunner(settings.git_home_dir, GitPolicy(allowed_protocols=()))
+    app.state.source_reader = SourceReader(MirrorStore(settings.mirrors_dir, reader_runner))
 
     app.middleware("http")(request_context)
     app.add_middleware(
@@ -56,6 +62,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(health.router, prefix="/api")
     app.include_router(repositories.router, prefix="/api")
     app.include_router(analyses.router, prefix="/api")
+    app.include_router(graph.router, prefix="/api")
     return app
 
 

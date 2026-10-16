@@ -119,3 +119,178 @@ class SnapshotIssue(Schema):
 
 RepositoryOut.model_rebuild()
 AnalysisOut.model_rebuild()
+
+
+# -- code graph --------------------------------------------------------------------------
+
+
+class SymbolSummary(Schema):
+    id: int
+    qualified_name: str
+    name: str
+    kind: str
+    visibility: str
+    path: str
+    file_id: int
+    start_line: int
+    start_col: int
+    end_line: int
+    end_col: int
+    signature: str | None
+    doc_summary: str | None
+    is_test: bool
+    has_parse_errors: bool
+
+
+class SymbolPage(Schema):
+    analysis_id: uuid.UUID
+    results_run_id: uuid.UUID
+    commit_sha: str
+    items: list[SymbolSummary]
+    page: PageMeta
+
+
+class NeighbourOut(Schema):
+    edge_type: str
+    confidence: str
+    provenance: str
+    reference_count: int
+    rules: list[str]
+    symbol: SymbolSummary
+
+
+class ReferenceOut(Schema):
+    id: int
+    ref_kind: str
+    raw_text: str
+    start_line: int
+    end_line: int
+    resolution_status: str
+    resolver_rule: str | None
+    external_target: str | None
+    candidates: list[str] | None
+    target_symbol_id: int | None
+    target_qualified_name: str | None
+
+
+class SymbolDetailOut(Schema):
+    analysis_id: uuid.UUID
+    commit_sha: str
+    symbol: SymbolSummary
+    body_fingerprint: str | None
+    decorators: list[str]
+    parent: SymbolSummary | None
+    children: list[SymbolSummary]
+    callers: list[NeighbourOut]
+    callers_total: int
+    callees: list[NeighbourOut]
+    callees_total: int
+    dependents: list[NeighbourOut]
+    dependencies: list[NeighbourOut]
+    references: list[ReferenceOut]
+    reference_counts: dict[str, int]
+
+
+class GraphNodeOut(Schema):
+    depth: int
+    symbol: SymbolSummary
+
+
+class GraphEdgeOut(Schema):
+    src: int
+    dst: int
+    edge_type: str
+    confidence: str
+
+
+class GraphOut(Schema):
+    analysis_id: uuid.UUID
+    commit_sha: str
+    root: int
+    nodes: list[GraphNodeOut]
+    edges: list[GraphEdgeOut]
+    truncated: bool
+    truncation_reason: str | None
+
+
+class PathOut(Schema):
+    found: bool
+    edges: list[GraphEdgeOut]
+    symbols: list[SymbolSummary]
+
+
+class ModuleNodeOut(Schema):
+    id: int
+    name: str
+    path: str
+
+
+class ModuleEdgeOut(Schema):
+    src_module_id: int
+    dst_module_id: int
+    edge_type: str
+    edges: int
+    references: int
+
+
+class ModuleGraphOut(Schema):
+    analysis_id: uuid.UUID
+    modules: list[ModuleNodeOut]
+    edges: list[ModuleEdgeOut]
+    import_cycles: list[list[int]]
+
+
+class DegreeOut(Schema):
+    symbol: SymbolSummary
+    count: int
+
+
+class StatsOut(Schema):
+    analysis_id: uuid.UUID
+    symbols_by_kind: dict[str, int]
+    edges_by_type: dict[str, int]
+    references_by_status: dict[str, int]
+    top_fan_in: list[DegreeOut]
+    top_fan_out: list[DegreeOut]
+
+
+class FileOut(Schema):
+    id: int
+    path: str
+    language: str | None
+    role: str
+    size_bytes: int
+    status: str | None
+    module_name: str | None
+    symbol_count: int | None
+    error_count: int | None
+
+
+class FilePage(Schema):
+    items: list[FileOut]
+    page: PageMeta
+    status_counts: dict[str, int]
+
+
+class WarningOut(Schema):
+    id: int
+    code: str
+    severity: str
+    message: str
+    path: str | None
+    start_line: int | None
+    end_line: int | None
+
+
+class WarningPage(Schema):
+    items: list[WarningOut]
+    page: PageMeta
+
+
+class SourceOut(Schema):
+    file_id: int
+    path: str
+    language: str | None
+    commit_sha: str
+    blob_sha: str
+    content: str
