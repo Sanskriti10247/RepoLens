@@ -1,0 +1,181 @@
+# Single-host production stack. See docs/deployment.md before using it.
+#
+#   cp .env.example .env.prod      # fill in the "Production (docker-compose.prod.yml)" section
+#   ./scripts/build-sandbox.sh     # the worker launches this image on the host daemon
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Only the web app is published, and only on 127.0.0.1. Put a TLS reverse proxy in front of
+# it (the optional `caddy` service below, enabled with `--profile tls`, or one on the host).
+
+name: ${COMPOSE_PROJECT_NAME:-repolens-prod}
+
+x-app-env: &app-env
+  REPOLENS_ENVIRONMENT: production
+  REPOLENS_DATABASE_URL: postgresql+psycopg://repolens:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/repolens
+  REPOLENS_API_TOKEN: ${REPOLENS_API_TOKEN:?set REPOLENS_API_TOKEN}
+  REPOLENS_LOG_FORMAT: json
+  REPOLENS_LOG_LEVEL: ${REPOLENS_LOG_LEVEL:-INFO}
+  REPOLENS_LLM_PROVIDER: ${REPOLENS_LLM_PROVIDER:-none}
+
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: repolens
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: repolens
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Not published: internal network only.
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U repolens -d repolens"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    # One-shot: apply Alembic migrations, then exit. api and worker wait for it to succeed.
+    image: ${REPOLENS_IMAGE_PREFIX:-repolens}-api:${REPOLENS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/app/Dockerfile
+      target: api
+    command: ["alembic", "upgrade", "head"]
+    environment: *app-env
+    restart: "no"
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ${REPOLENS_IMAGE_PREFIX:-repolens}-api:${REPOLENS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/app/Dockerfile
+      target: api
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      REPOLENS_API_HOST: 0.0.0.0
+      REPOLENS_API_PORT: "8100"
+      REPOLENS_DATA_DIR: ${REPOLENS_HOST_DATA_DIR:?set REPOLENS_HOST_DATA_DIR}
+    # Same user as the worker: the API reads source blobs from the worker's Git mirrors, and
+    # Git refuses repositories owned by another user.
+    user: "${REPOLENS_APP_UID:-10010}:${REPOLENS_APP_GID:-10010}"
+    volumes:
+      - ${REPOLENS_HOST_DATA_DIR:?set REPOLENS_HOST_DATA_DIR}:${REPOLENS_HOST_DATA_DIR:?set REPOLENS_HOST_DATA_DIR}
+    # Not published: only the web app talks to the API, and read endpoints are
+    # unauthenticated.
+    networks: [backend]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/api/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+
+  worker:
+    image: ${REPOLENS_IMAGE_PREFIX:-repolens}-worker:${REPOLENS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/app/Dockerfile
+      target: worker
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      # Must be the same absolute path on the host and in the container: the worker passes
+      # workspace paths to the host Docker daemon as bind-mount sources for the sandbox.
+      REPOLENS_DATA_DIR: ${REPOLENS_HOST_DATA_DIR:?set REPOLENS_HOST_DATA_DIR}
+      REPOLENS_SANDBOX_IMAGE: ${REPOLENS_SANDBOX_IMAGE:-repolens-sandbox:py3.12-1}
+      REPOLENS_MAX_CONCURRENT_SANDBOXES: ${REPOLENS_MAX_CONCURRENT_SANDBOXES:-2}
+      REPOLENS_SANDBOX_MEMORY_MB: ${REPOLENS_SANDBOX_MEMORY_MB:-1024}
+      REPOLENS_SANDBOX_CPUS: ${REPOLENS_SANDBOX_CPUS:-2.0}
+      REPOLENS_MIN_FREE_DISK_MB: ${REPOLENS_MIN_FREE_DISK_MB:-1024}
+    # Non-root, plus the host's docker group so it can use the socket (see below).
+    user: "${REPOLENS_APP_UID:-10010}:${REPOLENS_APP_GID:-10010}"
+    group_add:
+      - "${REPOLENS_DOCKER_GID:?set REPOLENS_DOCKER_GID (stat -c %g /var/run/docker.sock)}"
+    volumes:
+      # Root-equivalent on the host: whoever controls this container controls the host.
+      # See "The Docker socket" in docs/deployment.md.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${REPOLENS_HOST_DATA_DIR:?set REPOLENS_HOST_DATA_DIR}:${REPOLENS_HOST_DATA_DIR:?set REPOLENS_HOST_DATA_DIR}
+    # Outbound HTTPS to GitHub is needed for fetching; sandboxes themselves get --network none.
+    networks: [backend, egress]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: ${REPOLENS_IMAGE_PREFIX:-repolens}-web:${REPOLENS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      REPOLENS_API_URL: http://api:8100
+      REPOLENS_API_TOKEN: ${REPOLENS_API_TOKEN:?set REPOLENS_API_TOKEN}
+      # Only if your proxy rewrites Host and sets X-Forwarded-Host itself (Caddy keeps Host).
+      REPOLENS_TRUST_FORWARDED_HOST: ${REPOLENS_TRUST_FORWARDED_HOST:-false}
+    ports:
+      # Loopback only. Expose it through the TLS proxy, never directly.
+      - "127.0.0.1:${REPOLENS_WEB_PORT:-3100}:3100"
+    networks: [backend, frontend]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  caddy:
+    # Optional TLS terminator with basic auth: `--profile tls`. Needs ports 80/443 free and a
+    # DNS name pointing at this host (REPOLENS_PUBLIC_HOST).
+    profiles: [tls]
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    environment:
+      REPOLENS_PUBLIC_HOST: ${REPOLENS_PUBLIC_HOST:-}
+      REPOLENS_BASIC_AUTH_USER: ${REPOLENS_BASIC_AUTH_USER:-}
+      REPOLENS_BASIC_AUTH_HASH: ${REPOLENS_BASIC_AUTH_HASH:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [frontend]
+    depends_on:
+      web:
+        condition: service_healthy
+
+networks:
+  # Internal: postgres, api, worker and web. No route to the outside world.
+  backend:
+    internal: true
+  # The worker's route out (GitHub over HTTPS).
+  egress: {}
+  # Web <-> reverse proxy, and the published loopback port.
+  frontend: {}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

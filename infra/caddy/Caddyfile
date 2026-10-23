@@ -1,0 +1,23 @@
+# TLS and basic auth in front of the web app (docker-compose.prod.yml, profile "tls").
+# Caddy obtains and renews the certificate for REPOLENS_PUBLIC_HOST.
+#
+# RepoLens has no user accounts, so keep basic_auth or replace it with an SSO proxy.
+# Generate the hash with:
+#   docker run --rm caddy:2.10.2-alpine caddy hash-password --plaintext '<password>'
+{$REPOLENS_PUBLIC_HOST} {
+	encode zstd gzip
+
+	basic_auth {
+		{$REPOLENS_BASIC_AUTH_USER} {$REPOLENS_BASIC_AUTH_HASH}
+	}
+
+	# Caddy keeps the original Host header, which the web app's same-origin check relies on.
+	reverse_proxy web:3100
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+}
