@@ -1,0 +1,26 @@
+# Keep the build context small and free of secrets and local state.
+.git
+.github
+.env
+.env.*
+!.env.example
+**/node_modules
+**/.next
+apps/web/test-results
+apps/web/playwright-report
+apps/web/tsconfig.tsbuildinfo
+.venv
+**/__pycache__
+**/*.py[cod]
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.import_linter_cache
+.coverage*
+htmlcov
+var
+docs
+tests
+progress.md
+core
+core.[0-9]*
