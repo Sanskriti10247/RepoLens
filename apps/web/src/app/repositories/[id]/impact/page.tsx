@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Badge, Card, Empty, ErrorPanel, Loading } from "@/components/ui";
+import { Badge, Card, Empty, ErrorPanel, Loading, ReadOnlyNotice } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { TERMINAL_CHANGE, formatTime, shortSha } from "@/lib/format";
 import type { ChangeSet, Page, Repository } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 export default function ImpactListPage() {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +18,7 @@ export default function ImpactListPage() {
   const list = useApi<Page<ChangeSet>>(`/repositories/${id}/impact?limit=50`, {
     pollWhile: (page) => page.items.some((c) => !TERMINAL_CHANGE.has(c.status)),
   });
+  const readOnly = useReadOnly();
   const [base, setBase] = useState("");
   const [target, setTarget] = useState("HEAD");
   const [error, setError] = useState<ApiError | null>(null);
@@ -42,6 +44,10 @@ export default function ImpactListPage() {
   return (
     <>
       <Card title="Analyze a change">
+        {readOnly === true ? (
+          <ReadOnlyNotice what="analyzing new changes" />
+        ) : (
+        <>
         <form className="form-row" onSubmit={submit}>
           <label className="narrow">
             Base revision
@@ -57,7 +63,7 @@ export default function ImpactListPage() {
             Target revision
             <input required value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Target revision" />
           </label>
-          <button type="submit" disabled={busy || !base.trim() || !target.trim()}>
+          <button type="submit" disabled={busy || readOnly === null || !base.trim() || !target.trim()}>
             {busy ? "Queueing…" : "Analyze impact"}
           </button>
         </form>
@@ -66,6 +72,8 @@ export default function ImpactListPage() {
           mapped to symbols and propagated through the dependency graph.
         </p>
         {error && <ErrorPanel error={error} title="Could not start the impact analysis" />}
+        </>
+        )}
       </Card>
       <Card title="Impact analyses">
         {list.error && <ErrorPanel error={list.error} />}

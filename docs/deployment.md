@@ -58,7 +58,73 @@ The worker has to start Docker containers next to itself. That rules out:
   path translation and resource limits behave differently there.
 
 The web app on its own can be hosted anywhere Node.js runs, as long as it can reach the API
-privately. Analysis, impact and test execution still need the worker on a Docker host.
+privately. A read-only showcase does fit free tiers; see
+[Free hosting](#free-hosting-vercel--render). Analysis, impact and test execution still need the worker on a Docker host.
+
+## Free hosting (Vercel + Render)
+
+Demo mode puts a read-only copy of recorded analyses on free tiers: the web app on Vercel and
+the API on one Render web service. It is a showcase, not a working installation. The image in
+`infra/docker/demo/Dockerfile` holds the API and a small PostgreSQL server (the Debian package
+of the base image, version 17) and runs with `REPOLENS_READ_ONLY=true`. On every start it
+creates an empty database, restores `infra/demo/snapshot.tar.gz` (the database plus the Git
+mirrors the API reads source from) and starts the API.
+
+In read-only mode every request other than GET, HEAD and OPTIONS is refused with 403 and the
+error code `read_only`, whether or not a token is sent. `/api/health` reports
+`"read_only": true`, and the web app then hides the register, analyze, plan, run and question
+forms. Nothing needs a worker, Docker or an API token, so none of them are deployed. There
+are no new analyses, test plans, test runs or questions, and the data goes back to the
+snapshot whenever the service restarts. The snapshot holds `mahmoud/boltons` at `5150802`
+with an impact report against `574393a`, a test plan (108 of 399 tests, confirmed with
+sandboxed collection) and a sandboxed run of those tests (203 passed). It is about 3 MB.
+
+Measured with `docker run --memory 512m --memory-swap 512m` and `-e PORT=10000`:
+
+| | 0.5 CPU | 0.1 CPU (Render free) |
+|---|---|---|
+| Container start to `/api/ready` returning 200 | 5 s | 35 s |
+| Peak cgroup memory (`memory.peak`, includes page cache) | 227 MiB | 236 MiB |
+| Memory after a full pass over every read endpoint, without page cache | about 106 MiB | |
+| VmHWM, API process / largest PostgreSQL process | 110 MB / 30 MB | |
+
+Render free web services sleep after 15 minutes without traffic. The first request after that
+waits for a restart, which includes the snapshot restore. The web app's `/api` proxy allows up
+to 60 seconds for it.
+
+Render:
+
+- New Web Service, language Docker, from the repository.
+- Dockerfile path `infra/docker/demo/Dockerfile`, Docker build context directory `.`.
+- Instance type Free. Health check path `/api/ready`.
+- No environment variables are required. Render sets `PORT`, and the image reads it. Do not
+  attach a disk.
+
+Vercel:
+
+- Import the repository with Root Directory `apps/web` and Framework Preset Next.js. Leave
+  "Include source files outside of the Root Directory" on, so the npm workspace at the
+  repository root installs, and leave the build and install commands at their defaults.
+- One environment variable: `REPOLENS_API_URL=https://<your-service>.onrender.com`. No API
+  token is needed. Do not set `REPOLENS_WEB_STANDALONE`.
+- `REPOLENS_TRUST_FORWARDED_HOST` is not needed: Vercel passes the public host through as
+  `Host`, which already matches the browser's `Origin`.
+
+To rebuild the snapshot, run the normal local stack (README, "Getting started") against a
+separate database and data directory, for example `repolens_demo` and `var/demo-data`, with
+the sandbox image built. Register the repository, analyze the two revisions through an
+impact analysis, run collection, create a test plan and run it, then:
+
+```bash
+DEMO_DB=repolens_demo DEMO_DATA_DIR=var/demo-data ./scripts/make_demo_snapshot.sh
+docker build -f infra/docker/demo/Dockerfile -t repolens-demo .
+docker run --rm --memory 512m --memory-swap 512m -e PORT=10000 -p 127.0.0.1:18300:10000 repolens-demo
+```
+
+The script dumps a scratch copy of the database with worker and lease fields cleared and the
+parse cache emptied, and stops if the dump contains this host's name, home directory or the
+API token. Questions are answered on request and not stored, so they are not part of the
+snapshot.
 
 ## The Docker socket
 

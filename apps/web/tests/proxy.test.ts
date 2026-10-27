@@ -89,6 +89,23 @@ describe("isSameOrigin", () => {
     expect(isSameOrigin(request(), true)).toBe(true);
   });
 
+  it("accepts a same-origin request behind a proxy that forwards Host unchanged", () => {
+    // Vercel passes the public Host through and also sets X-Forwarded-Host to it, so the
+    // default (untrusted) check already matches Origin.
+    const headers = {
+      origin: "https://repolens.vercel.app",
+      host: "repolens.vercel.app",
+      "x-forwarded-host": "repolens.vercel.app",
+      "sec-fetch-site": "same-origin",
+    };
+    expect(isSameOrigin(new Request("https://repolens.vercel.app/api/x", { method: "POST", headers }))).toBe(true);
+  });
+
+  it("rejects a foreign Origin even when X-Forwarded-Host is spoofed to match it", () => {
+    const headers = { origin: "https://evil.example", host: "repolens.vercel.app", "x-forwarded-host": "evil.example" };
+    expect(isSameOrigin(new Request("https://repolens.vercel.app/api/x", { method: "POST", headers }))).toBe(false);
+  });
+
   it("rejects requests without any origin information", () => {
     expect(isSameOrigin(new Request("http://localhost:3100/api/x", { method: "POST" }))).toBe(false);
   });

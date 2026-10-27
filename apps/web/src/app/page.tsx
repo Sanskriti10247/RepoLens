@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Badge, Card, Empty, ErrorPanel, Loading } from "@/components/ui";
+import { Badge, Card, Empty, ErrorPanel, Loading, ReadOnlyNotice } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { formatTime, shortSha } from "@/lib/format";
 import type { Page, Repository } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 export default function RepositoriesPage() {
   const { data, error, loading, reload } = useApi<Page<Repository>>("/repositories?limit=100");
@@ -57,6 +58,7 @@ export default function RepositoriesPage() {
 
 function RegisterForm({ onRegistered }: { onRegistered: () => void }) {
   const router = useRouter();
+  const readOnly = useReadOnly();
   const [url, setUrl] = useState("");
   const [ref, setRef] = useState("HEAD");
   const [busy, setBusy] = useState(false);
@@ -78,6 +80,13 @@ function RegisterForm({ onRegistered }: { onRegistered: () => void }) {
     }
   }
 
+  if (readOnly === true) {
+    return (
+      <Card title="Analyze a repository">
+        <ReadOnlyNotice what="registering and analyzing repositories" />
+      </Card>
+    );
+  }
   return (
     <Card title="Analyze a repository">
       <form className="form-row" onSubmit={submit}>
@@ -95,7 +104,7 @@ function RegisterForm({ onRegistered }: { onRegistered: () => void }) {
           Branch, tag or commit
           <input value={ref} onChange={(e) => setRef(e.target.value)} aria-label="Revision" />
         </label>
-        <button type="submit" disabled={busy || !url.trim()}>
+        <button type="submit" disabled={busy || readOnly === null || !url.trim()}>
           {busy ? "Submitting…" : "Register and analyze"}
         </button>
       </form>

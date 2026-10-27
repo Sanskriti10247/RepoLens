@@ -16,6 +16,15 @@ export function Loading({ what = "Loading" }: { what?: string }) {
   );
 }
 
+/** Shown in place of an action that a read-only instance refuses. */
+export function ReadOnlyNotice({ what }: { what: string }) {
+  return (
+    <p className="muted small" role="note">
+      This is a read-only demo of recorded analyses, so {what} is turned off.
+    </p>
+  );
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }

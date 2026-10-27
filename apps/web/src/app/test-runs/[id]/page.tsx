@@ -9,6 +9,7 @@ import { ApiError, postJson } from "@/lib/api";
 import { formatDuration, formatTime, label, shortSha } from "@/lib/format";
 import type { CoverageSummary, Page, RunLogs, TestResult, TestRun } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 const EXPLANATIONS: Record<string, string> = {
   PASSED: "pytest exited 0 and the report shows no failures or errors.",
@@ -28,6 +29,7 @@ export default function TestRunPage() {
     pollMs: 1000,
   });
   const [error, setError] = useState<ApiError | null>(null);
+  const readOnly = useReadOnly();
   if (run.error) return <ErrorPanel error={run.error} />;
   if (!run.data) return <Loading what="Loading test run" />;
   const r = run.data;
@@ -60,8 +62,8 @@ export default function TestRunPage() {
       </h1>
       <Card
         actions={
-          !completed && (
-            <button className="danger" onClick={cancel}>
+          !completed && readOnly !== true && (
+            <button className="danger" onClick={cancel} disabled={readOnly === null}>
               Cancel run
             </button>
           )

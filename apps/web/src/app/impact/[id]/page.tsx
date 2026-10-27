@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 
-import { Badge, Breadcrumbs, Card, Empty, ErrorPanel, KeyValues, Loading, Stat } from "@/components/ui";
+import { Badge, Breadcrumbs, Card, Empty, ErrorPanel, KeyValues, Loading, ReadOnlyNotice, Stat } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { TERMINAL_CHANGE, formatTime, label, shortSha } from "@/lib/format";
 import type {
@@ -17,6 +17,7 @@ import type {
   TestPlan,
 } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 export default function ImpactPage() {
   const { id } = useParams<{ id: string }>();
@@ -315,6 +316,7 @@ function ImpactItems({ changeId }: { changeId: string }) {
 function Plans({ changeId }: { changeId: string }) {
   const router = useRouter();
   const plans = useApi<TestPlan[]>(`/impact/${changeId}/test-plans`);
+  const readOnly = useReadOnly();
   const [policy, setPolicy] = useState("CONSERVATIVE");
   const [maxTests, setMaxTests] = useState("");
   const [maxSeconds, setMaxSeconds] = useState("");
@@ -335,6 +337,9 @@ function Plans({ changeId }: { changeId: string }) {
   }
   return (
     <Card title="Test selection">
+      {readOnly === true ? (
+        <ReadOnlyNotice what="selecting new tests" />
+      ) : (
       <form className="form-row" onSubmit={create}>
         <label className="narrow">
           Policy
@@ -355,8 +360,9 @@ function Plans({ changeId }: { changeId: string }) {
             </label>
           </>
         )}
-        <button type="submit">Select tests</button>
+        <button type="submit" disabled={readOnly === null}>Select tests</button>
       </form>
+      )}
       {error && <ErrorPanel error={error} title="Could not create a test plan" />}
       {plans.data && plans.data.length > 0 && (
         <table className="table small">

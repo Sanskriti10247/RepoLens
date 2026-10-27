@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 
-import { Badge, Breadcrumbs, Card, Empty, ErrorPanel, KeyValues, Loading } from "@/components/ui";
+import { Badge, Breadcrumbs, Card, Empty, ErrorPanel, KeyValues, Loading, ReadOnlyNotice } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { formatDuration, label } from "@/lib/format";
 import type { ChangeSet, Page, PlanEvidence, TestPlan, TestPlanItem, TestRun } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 export default function TestPlanPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +20,7 @@ export default function TestPlanPage() {
   const [coverage, setCoverage] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const readOnly = useReadOnly();
   if (plan.error) return <ErrorPanel error={plan.error} />;
   if (!plan.data) return <Loading what="Loading test plan" />;
   const p = plan.data;
@@ -68,17 +70,20 @@ export default function TestPlanPage() {
       )}
       <Card
         actions={
+          readOnly === true ? undefined : (
           <>
             <label className="checkbox">
               <input type="checkbox" checked={coverage} onChange={(e) => setCoverage(e.target.checked)} />
               Collect coverage
             </label>
-            <button onClick={run} disabled={busy || (p.selected_tests === 0 && p.scope !== "FULL_SUITE")}>
+            <button onClick={run} disabled={busy || readOnly === null || (p.selected_tests === 0 && p.scope !== "FULL_SUITE")}>
               {busy ? "Starting…" : p.scope === "FULL_SUITE" ? "Run full suite in sandbox" : `Run ${p.selected_tests} selected tests`}
             </button>
           </>
+          )
         }
       >
+        {readOnly === true && <ReadOnlyNotice what="running tests" />}
         <KeyValues
           items={[
             ["Selected", `${p.selected_tests} of ${p.total_tests} tests`],

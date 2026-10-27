@@ -4,10 +4,11 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { Markdownish, inline } from "@/components/Markdownish";
-import { Badge, Card, ErrorPanel } from "@/components/ui";
+import { Badge, Card, ErrorPanel, ReadOnlyNotice } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { label, shortSha } from "@/lib/format";
 import type { Evidence, QuestionAnswer } from "@/lib/types";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 const EXAMPLES = [
   "Where is the main entry point implemented?",
@@ -24,6 +25,7 @@ export default function AskPage() {
   const [answer, setAnswer] = useState<QuestionAnswer | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const readOnly = useReadOnly();
 
   async function ask(event: React.FormEvent) {
     event.preventDefault();
@@ -46,6 +48,9 @@ export default function AskPage() {
   return (
     <>
       <Card title="Ask about this repository">
+        {readOnly === true ? (
+          <ReadOnlyNotice what="asking questions" />
+        ) : (
         <form onSubmit={ask} className="ask-form">
           <textarea
             value={question}
@@ -60,11 +65,12 @@ export default function AskPage() {
               <input type="checkbox" checked={useModel} onChange={(e) => setUseModel(e.target.checked)} />
               Let the configured model explain the evidence (if one is enabled)
             </label>
-            <button type="submit" disabled={busy || !question.trim()}>
+            <button type="submit" disabled={busy || readOnly === null || !question.trim()}>
               {busy ? "Searching evidence…" : "Ask"}
             </button>
           </div>
         </form>
+        )}
         <p className="muted small">
           Answers are assembled from the analysis: symbols, source, resolved relationships, recorded runs.
           Name a function, class, module or file for precise results. Examples: {EXAMPLES.join(" · ")}

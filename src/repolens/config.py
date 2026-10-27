@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8100, ge=1, le=65535)
     # Bearer token required for mutating endpoints. None disables them entirely.
     api_token: SecretStr | None = None
+    # Showcase mode: every mutating endpoint answers 403 and nothing needs a worker or Docker.
+    read_only: bool = False
     cors_origins: list[str] = ["http://127.0.0.1:3100", "http://localhost:3100"]
 
     data_dir: Path = Path("var")

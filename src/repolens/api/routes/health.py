@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import Engine
 
 import repolens
-from repolens.api.dependencies import get_engine
+from repolens.api.dependencies import SettingsDep, get_engine
 from repolens.persistence.migrations import alembic_config
 
 router = APIRouter(tags=["health"])
@@ -19,6 +19,8 @@ router = APIRouter(tags=["health"])
 class Health(BaseModel):
     status: Literal["ok"]
     version: str
+    # True when the instance refuses every mutation (REPOLENS_READ_ONLY).
+    read_only: bool
 
 
 class ReadinessCheck(BaseModel):
@@ -33,9 +35,9 @@ class Readiness(BaseModel):
 
 
 @router.get("/health", response_model=Health)
-def health() -> Health:
+def health(settings: SettingsDep) -> Health:
     """Liveness: the process is up. Does not touch dependencies."""
-    return Health(status="ok", version=repolens.__version__)
+    return Health(status="ok", version=repolens.__version__, read_only=settings.read_only)
 
 
 @router.get("/ready", response_model=Readiness, responses={503: {"model": Readiness}})

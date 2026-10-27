@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
-import { Badge, Card, Empty, ErrorPanel, KeyValues, Loading, Stat } from "@/components/ui";
+import { Badge, Card, Empty, ErrorPanel, KeyValues, Loading, ReadOnlyNotice, Stat } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { TERMINAL_ANALYSIS, formatBytes, formatDuration, formatTime, label, shortSha } from "@/lib/format";
 import type { Analysis, AnalysisSummary, FilePage, Page, TestCase, TestRun, Warning } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 export default function RepositoryOverview() {
   const { id } = useParams<{ id: string }>();
@@ -64,6 +65,7 @@ export default function RepositoryOverview() {
 }
 
 function AnalyzeForm({ repoId, onQueued }: { repoId: string; onQueued: () => void }) {
+  const readOnly = useReadOnly();
   const [ref, setRef] = useState("HEAD");
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,13 +82,14 @@ function AnalyzeForm({ repoId, onQueued }: { repoId: string; onQueued: () => voi
       setBusy(false);
     }
   }
+  if (readOnly === true) return <ReadOnlyNotice what="analyzing new revisions" />;
   return (
     <form className="form-row compact" onSubmit={submit}>
       <label className="narrow">
         Analyze revision
         <input value={ref} onChange={(e) => setRef(e.target.value)} aria-label="Revision to analyze" />
       </label>
-      <button type="submit" disabled={busy}>
+      <button type="submit" disabled={busy || readOnly === null}>
         {busy ? "Queueing…" : "Analyze"}
       </button>
       {error && <ErrorPanel error={error} title="Could not queue the analysis" />}
@@ -227,6 +230,7 @@ function IndexingCompleteness({ analysisId }: { analysisId: string }) {
 
 function TestsCard({ analysisId, onChange }: { analysisId: string; onChange: () => void }) {
   const tests = useApi<Page<TestCase>>(`/analyses/${analysisId}/tests?limit=100`);
+  const readOnly = useReadOnly();
   const [run, setRun] = useState<TestRun | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const counts: Record<string, number> = {};
@@ -244,9 +248,11 @@ function TestsCard({ analysisId, onChange }: { analysisId: string; onChange: () 
     <Card
       title="Tests"
       actions={
-        <button className="secondary" onClick={collect} disabled={!!run}>
-          Confirm with sandboxed pytest collection
-        </button>
+        readOnly === true ? undefined : (
+          <button className="secondary" onClick={collect} disabled={!!run || readOnly === null}>
+            Confirm with sandboxed pytest collection
+          </button>
+        )
       }
     >
       {tests.data && tests.data.page.total === 0 && (

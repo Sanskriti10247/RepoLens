@@ -45,6 +45,13 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (await response.json()) as T;
 }
 
+export interface Health {
+  status: "ok";
+  version: string;
+  /** The API refuses every mutation (REPOLENS_READ_ONLY). */
+  read_only: boolean;
+}
+
 export interface ReadinessCheck {
   name: string;
   ok: boolean;
