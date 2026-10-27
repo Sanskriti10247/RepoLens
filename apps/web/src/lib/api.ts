@@ -50,6 +50,11 @@ export interface Health {
   version: string;
   /** The API refuses every mutation (REPOLENS_READ_ONLY). */
   read_only: boolean;
+  /**
+   * Test runs and sandboxed collection are available (false where the host has no Docker, in
+   * which case those requests fail with 409 ``sandbox_unavailable``). Absent on older APIs.
+   */
+  sandbox?: boolean;
 }
 
 export interface ReadinessCheck {

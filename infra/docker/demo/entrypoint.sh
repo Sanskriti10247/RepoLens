@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start a throwaway PostgreSQL, restore the demo snapshot and run the read-only API.
+# Start a throwaway PostgreSQL, restore the demo snapshot, then run the API and the worker.
+# If either process exits the container exits too, so the host restarts it.
 set -euo pipefail
 
 HOME_DIR="${REPOLENS_DEMO_HOME:-/tmp/repolens-demo}"
@@ -51,4 +52,35 @@ echo "{\"event\": \"demo_database_ready\", \"seconds\": $((SECONDS - started))}"
 export REPOLENS_DATABASE_URL="postgresql+psycopg://repolens@127.0.0.1:$PG_PORT/repolens"
 export REPOLENS_DATA_DIR="$HOME_DIR/data"
 export REPOLENS_API_PORT="${PORT:-8000}"
-exec repolens-api
+
+read_only="${REPOLENS_READ_ONLY:-false}"
+if [[ "${read_only,,}" =~ ^(1|true|yes|on)$ ]]; then
+  exec repolens-api
+fi
+if [[ -z "${REPOLENS_API_TOKEN:-}" ]]; then
+  echo '{"event": "demo_writes_disabled", "detail": "REPOLENS_API_TOKEN is not set; registering and analyzing repositories is refused"}'
+fi
+
+pids=()
+stop() {
+  trap - TERM INT
+  kill -TERM "${pids[@]}" 2>/dev/null || true
+  wait "${pids[@]}" 2>/dev/null || true
+  "$PGBIN/pg_ctl" -D "$PGDATA" -m fast -w stop >/dev/null || true
+}
+trap 'stop; exit 143' TERM INT
+
+repolens-api &
+pids+=($!)
+# On a tenth of a CPU the two Python start-ups compete; let the API answer health checks first.
+(
+  until (exec 3<>"/dev/tcp/127.0.0.1/$REPOLENS_API_PORT") 2>/dev/null; do sleep 1; done
+  exec repolens-worker
+) &
+pids+=($!)
+
+status=0
+wait -n "${pids[@]}" || status=$?
+echo "{\"event\": \"demo_process_exited\", \"status\": $status}"
+stop
+exit $(( status == 0 ? 1 : status ))

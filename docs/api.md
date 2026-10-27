@@ -66,7 +66,7 @@ curl -s -H "$H" -H 'content-type: application/json' \
 
 | Area | Endpoints |
 |---|---|
-| health | `GET /health`, `GET /ready` (database reachable, migrations at head). `/health` also reports `read_only`; with `REPOLENS_READ_ONLY=true` every request other than GET, HEAD and OPTIONS returns 403 with code `read_only` |
+| health | `GET /health`, `GET /ready` (database reachable, migrations at head). `/health` also reports `read_only`; with `REPOLENS_READ_ONLY=true` every request other than GET, HEAD and OPTIONS returns 403 with code `read_only`. It reports `sandbox`, false when `REPOLENS_SANDBOX_ENABLED=false`; test runs and collection then return 409 with code `sandbox_unavailable` |
 | repositories | `GET/POST /repositories`, `GET /repositories/{id}`, `GET/POST /repositories/{id}/analyses` |
 | analyses | `GET /analyses/{id}`, `POST /analyses/{id}/cancel`, `GET /analyses/{id}/snapshot-issues`, `…/files`, `…/warnings`, `…/modules`, `…/stats`, `…/tests` |
 | graph | `GET /repositories/{id}/symbols`, `…/symbols/{symbol_id}`, `…/graph`, `…/paths`, `…/files/{file_id}/source` |

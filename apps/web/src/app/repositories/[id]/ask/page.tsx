@@ -51,30 +51,41 @@ export default function AskPage() {
         {readOnly === true ? (
           <ReadOnlyNotice what="asking questions" />
         ) : (
-        <form onSubmit={ask} className="ask-form">
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="e.g. Who calls with_tax?  ·  What could break if I change Item.total?"
-            rows={3}
-            maxLength={1000}
-            aria-label="Question"
-          />
-          <div className="form-row compact">
-            <label className="checkbox">
-              <input type="checkbox" checked={useModel} onChange={(e) => setUseModel(e.target.checked)} />
-              Let the configured model explain the evidence (if one is enabled)
-            </label>
-            <button type="submit" disabled={busy || readOnly === null || !question.trim()}>
-              {busy ? "Searching evidence…" : "Ask"}
-            </button>
-          </div>
-        </form>
+          <form onSubmit={ask} className="ask-form">
+            <textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Who calls with_tax?   What could break if I change Item.total?"
+              rows={3}
+              maxLength={1000}
+              aria-label="Question"
+            />
+            <div className="form-row compact">
+              <label className="checkbox">
+                <input type="checkbox" checked={useModel} onChange={(e) => setUseModel(e.target.checked)} />
+                Let the configured model explain the evidence (if one is enabled)
+              </label>
+              <button type="submit" disabled={busy || readOnly === null || !question.trim()}>
+                {busy ? "Searching evidence…" : "Ask"}
+              </button>
+            </div>
+          </form>
         )}
-        <p className="muted small">
-          Answers are assembled from the analysis: symbols, source, resolved relationships, recorded runs.
-          Name a function, class, module or file for precise results. Examples: {EXAMPLES.join(" · ")}
+        <p className="hint">
+          Answers are put together from the analysis itself: symbols, source, resolved relationships and recorded
+          runs. Naming a function, class, module or file gets the most precise answer.
         </p>
+        {readOnly !== true && (
+          <ul className="examples" aria-label="Example questions">
+            {EXAMPLES.map((example) => (
+              <li key={example}>
+                <button type="button" className="link" onClick={() => setQuestion(example)}>
+                  {example}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {error && <ErrorPanel error={error} />}
       </Card>
       {answer && <AnswerView answer={answer} />}
@@ -97,11 +108,11 @@ function AnswerView({ answer }: { answer: QuestionAnswer }) {
             <Markdownish text={answer.model_explanation} />
           </div>
         )}
-        {answer.model_note && <p className="muted small">{answer.model_note}</p>}
+        {answer.model_note && <p className="hint">{answer.model_note}</p>}
         <Markdownish text={answer.answer_markdown} />
-        <p className="muted small">
-          Commit <span className="mono">{shortSha(answer.commit_sha)}</span> ·{" "}
-          {answer.mode === "model" ? "model explanation + evidence" : "evidence only (no model)"}
+        <p className="answer-meta">
+          At commit <span className="sha">{shortSha(answer.commit_sha)}</span> ·{" "}
+          {answer.mode === "model" ? "model explanation plus evidence" : "evidence only, no model"}
         </p>
       </Card>
       {answer.evidence.length > 0 && (
@@ -127,10 +138,11 @@ function EvidenceItem({ evidence }: { evidence: Evidence }) {
   }[evidence.category];
   return (
     <li id={evidence.id}>
-      <span className="mono small">{evidence.id}</span> <Badge value={tone} text={label(evidence.category)} />{" "}
-      {inline(evidence.statement)}
+      <span className="evidence-id">{evidence.id}</span>
+      <Badge value={tone} text={label(evidence.category)} />
+      <div>{inline(evidence.statement)}</div>
       {evidence.path && (
-        <div className="muted small mono">
+        <div className="evidence-where">
           {evidence.path}
           {evidence.start_line ? `:${evidence.start_line}-${evidence.end_line}` : ""} @ {shortSha(evidence.commit_sha)}{" "}
           {evidence.text && (

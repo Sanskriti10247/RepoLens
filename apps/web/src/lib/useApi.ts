@@ -17,6 +17,12 @@ interface Options<T> {
   pollMs?: number;
 }
 
+// A free-tier API sleeps when idle and takes about a minute to wake; the proxy answers 502/504
+// meanwhile. Reads retry quietly for a while instead of showing an error straight away.
+const WAKE_STATUSES = new Set([0, 502, 503, 504]);
+const WAKE_RETRY_MS = 5000;
+const WAKE_RETRIES = 24;
+
 interface Result<T> {
   key: string | null;
   data: T | null;
@@ -38,10 +44,12 @@ export function useApi<T>(path: string | null, options: Options<T> = {}): ApiSta
     if (key === null || path === null) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let retries = 0;
     async function load() {
       try {
         const data = await apiFetch<T>(path as string);
         if (cancelled) return;
+        retries = 0;
         setResult({ key, data, error: null });
         const { pollWhile, pollMs = 1500 } = optionsRef.current;
         if (pollWhile?.(data)) timer = setTimeout(load, pollMs);
@@ -51,6 +59,11 @@ export function useApi<T>(path: string | null, options: Options<T> = {}): ApiSta
           caught instanceof ApiError
             ? caught
             : new ApiError(0, "network_error", "Could not reach the API", null);
+        if (WAKE_STATUSES.has(error.status) && retries < WAKE_RETRIES) {
+          retries += 1;
+          timer = setTimeout(load, WAKE_RETRY_MS);
+          return;
+        }
         setResult((previous) => ({ key, data: previous.data, error }));
       }
     }

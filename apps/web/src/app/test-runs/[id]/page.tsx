@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
-import { Badge, Card, Empty, ErrorPanel, KeyValues, Loading, Stat } from "@/components/ui";
+import { Badge, Card, Empty, ErrorPanel, KeyValues, Loading, Progress, Stat, Stats } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { formatDuration, formatTime, label, shortSha } from "@/lib/format";
 import type { CoverageSummary, Page, RunLogs, TestResult, TestRun } from "@/lib/types";
@@ -48,6 +48,8 @@ export default function TestRunPage() {
   return (
     <>
       <p className="breadcrumbs">
+        <Link href={`/repositories/${r.repository_id}`}>Repository</Link>
+        <span className="sep">/</span>
         <Link href={`/repositories/${r.repository_id}/runs`}>Test runs</Link>
         {r.plan_id && (
           <>
@@ -61,6 +63,7 @@ export default function TestRunPage() {
         {completed ? <Badge value={r.outcome} /> : <Badge value={r.status} />}
       </h1>
       <Card
+        title="Details"
         actions={
           !completed && readOnly !== true && (
             <button className="danger" onClick={cancel} disabled={readOnly === null}>
@@ -75,10 +78,16 @@ export default function TestRunPage() {
             {r.outcome_reason && <span className="muted">({r.outcome_reason})</span>}
           </p>
         )}
-        {!completed && <p className="muted">{r.status === "QUEUED" ? "Waiting for a worker…" : "Running in the sandbox…"} This page updates automatically.</p>}
+        {!completed && (
+          <Progress
+            doing={r.status === "QUEUED" ? "Waiting for a worker" : "Running in the sandbox"}
+            since={r.status === "QUEUED" ? r.created_at : (r.started_at ?? r.created_at)}
+            detail="this page refreshes by itself"
+          />
+        )}
         <KeyValues
           items={[
-            ["Commit", <span key="c" className="mono">{shortSha(r.commit_sha)}</span>],
+            ["Commit", <span key="c" className="sha" title={r.commit_sha}>{shortSha(r.commit_sha)}</span>],
             ["Tests requested", r.mode === "FULL_SUITE" ? "entire suite" : r.mode === "COLLECT" ? "collection only" : String(r.requested_node_ids.length)],
             ["Duration", formatDuration(r.duration_ms)],
             ["pytest exit code", r.pytest_exit_code ?? "—"],
@@ -92,12 +101,12 @@ export default function TestRunPage() {
         {error && <ErrorPanel error={error} title="Could not cancel" />}
       </Card>
       {completed && r.counts && (
-        <div className="stats">
+        <Stats>
           <Stat label="Passed" value={r.counts.passed ?? 0} />
           <Stat label="Failed" value={r.counts.failed ?? 0} />
           <Stat label="Errors" value={r.counts.error ?? 0} />
           <Stat label="Skipped" value={r.counts.skipped ?? 0} />
-        </div>
+        </Stats>
       )}
       {completed && <Results runId={id} />}
       {completed && r.coverage && <Coverage runId={id} />}
@@ -115,15 +124,24 @@ function Results({ runId }: { runId: string }) {
   return (
     <Card title={`Results (${data.page.total})`}>
       <table className="table small">
+        <thead>
+          <tr>
+            <th>Outcome</th>
+            <th>Test</th>
+            <th className="right">Took</th>
+          </tr>
+        </thead>
         <tbody>
           {sorted.map((result) => (
             <tr key={result.id}>
-              <td>
+              <td className="nowrap">
                 <Badge value={result.outcome} />
               </td>
-              <td className="mono">{result.node_id}</td>
-              <td>{formatDuration(result.duration_ms)}</td>
-              <td className="mono wrap">{result.message ?? ""}</td>
+              <td className="mono">
+                {result.node_id}
+                {result.message && <span className="row-sub wrap">{result.message}</span>}
+              </td>
+              <td className="mono right nowrap">{formatDuration(result.duration_ms)}</td>
             </tr>
           ))}
         </tbody>
@@ -144,22 +162,22 @@ function Coverage({ runId }: { runId: string }) {
           <thead>
             <tr>
               <th>File</th>
-              <th>Lines executed</th>
-              <th>Tests</th>
+              <th className="right">Lines executed</th>
+              <th className="right">Tests</th>
             </tr>
           </thead>
           <tbody>
             {data.files.map((f) => (
               <tr key={f.path}>
                 <td className="mono">{f.path}</td>
-                <td>{f.lines_covered}</td>
-                <td>{f.tests}</td>
+                <td className="mono right">{f.lines_covered}</td>
+                <td className="mono right">{f.tests}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <p className="muted small">{data.note}</p>
+      <p className="hint">{data.note}</p>
     </Card>
   );
 }
@@ -178,7 +196,7 @@ function Logs({ runId }: { runId: string }) {
           <pre className="log">{data.stderr_tail}</pre>
         </>
       )}
-      <p className="muted small">{data.note}</p>
+      <p className="hint">{data.note}</p>
     </Card>
   );
 }

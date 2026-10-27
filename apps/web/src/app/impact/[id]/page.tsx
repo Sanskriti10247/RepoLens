@@ -4,9 +4,23 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 
-import { Badge, Breadcrumbs, Card, Empty, ErrorPanel, KeyValues, Loading, ReadOnlyNotice, Stat } from "@/components/ui";
+import {
+  Badge,
+  Breadcrumbs,
+  Card,
+  Empty,
+  ErrorPanel,
+  FailureNote,
+  KeyValues,
+  Loading,
+  Progress,
+  ReadOnlyNotice,
+  Stat,
+  Stats,
+  When,
+} from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
-import { TERMINAL_CHANGE, formatTime, label, shortSha } from "@/lib/format";
+import { TERMINAL_CHANGE, label, shortSha } from "@/lib/format";
 import type {
   ChangeSet,
   ChangedFile,
@@ -34,28 +48,32 @@ export default function ImpactPage() {
         items={[
           ["Repository", `/repositories/${c.repository_id}`],
           ["Impact", `/repositories/${c.repository_id}/impact`],
-          [`${c.base_ref} → ${c.target_ref}`, null],
+          [`${shortRef(c.base_ref)} → ${shortRef(c.target_ref)}`, null],
         ]}
       />
-      <h1>
-        Impact of <span className="mono">{c.base_ref}</span> → <span className="mono">{c.target_ref}</span>{" "}
-        <Badge value={c.status} />
-      </h1>
-      <Card>
+      <div className="page-head">
+        <h1>
+          Impact of <span className="mono">{shortRef(c.base_ref)}</span> →{" "}
+          <span className="mono">{shortRef(c.target_ref)}</span> <Badge value={c.status} />
+        </h1>
         <KeyValues
           items={[
-            ["Base commit", <span key="b" className="mono">{c.base_sha ?? "resolving…"}</span>],
-            ["Target commit", <span key="t" className="mono">{c.target_sha ?? "resolving…"}</span>],
+            ["Base commit", <span key="b" className="sha" title={c.base_sha ?? undefined}>{c.base_sha ? shortSha(c.base_sha) : "resolving…"}</span>],
+            ["Target commit", <span key="t" className="sha" title={c.target_sha ?? undefined}>{c.target_sha ? shortSha(c.target_sha) : "resolving…"}</span>],
             ["Diff", c.diff_algorithm ?? "—"],
-            ["Created", formatTime(c.created_at)],
-            ["Job", c.job ? `${label(c.job.status)} (attempt ${c.job.attempts}/${c.job.max_attempts})` : "—"],
+            ["Requested", <When key="w" iso={c.created_at} />],
+            ["Job", c.job ? `${label(c.job.status)} (attempt ${c.job.attempts} of ${c.job.max_attempts})` : "—"],
           ]}
         />
         {!TERMINAL_CHANGE.has(c.status) && (
-          <p className="muted">Analyzing both revisions and mapping the change… this page updates automatically.</p>
+          <Progress
+            doing={c.status === "QUEUED" ? "Queued" : "Comparing revisions"}
+            since={c.status === "QUEUED" ? c.created_at : (c.job?.started_at ?? c.created_at)}
+            detail="both revisions are analyzed first if needed; this page refreshes by itself"
+          />
         )}
-        {c.error && <div className="error-panel">{c.error}</div>}
-      </Card>
+        {c.error && <FailureNote>{c.error}</FailureNote>}
+      </div>
       {done && <Report changeId={id} />}
       {done && <ChangedFiles changeId={id} />}
       {done && <ChangedSymbols changeId={id} />}
@@ -73,24 +91,24 @@ function Report({ changeId }: { changeId: string }) {
   const hidden = data.uncertainty.possible_hidden_callers ?? [];
   return (
     <>
-      <div className="stats">
+      <Stats>
         <Stat label="Changed symbols" value={counts.changed_symbols ?? 0} />
         <Stat label="Impacted symbols" value={counts.impacted_symbols ?? 0} hint="non-test" />
         <Stat label="Impacted tests" value={counts.impacted_tests ?? 0} />
         <Stat label="Risk" value={<Badge value={data.risk_level} />} hint={`${data.risk_factors.reduce((s, f) => s + f.points, 0)} points`} />
         <Stat label="Completeness" value={<Badge value={data.completeness} />} />
         <Stat label="Recommended" value={<Badge value={data.recommended_scope} text={label(data.recommended_scope)} />} />
-      </div>
-      <div className="grid-2">
+      </Stats>
+      <div className="columns">
         <Card title="Recommended verification">
-          <ul className="plain">
+          <ul className="rules">
             {data.scope_reasons.map((r) => (
               <li key={r}>{r}</li>
             ))}
           </ul>
           {data.completeness_reasons.length > 0 && (
             <>
-              <p className="small">Why the analysis is not complete:</p>
+              <h3>Why the analysis is not complete</h3>
               <ul className="plain small mono">
                 {data.completeness_reasons.map((r, i) => (
                   <li key={i}>
@@ -103,24 +121,24 @@ function Report({ changeId }: { changeId: string }) {
         </Card>
         <Card title="Risk factors">
           {data.risk_factors.length === 0 ? (
-            <p className="muted small">No risk factors apply.</p>
+            <p className="muted">No risk factors apply.</p>
           ) : (
             <table className="table small">
               <tbody>
                 {data.risk_factors.map((f) => (
                   <tr key={f.factor}>
-                    <td>{label(f.factor)}</td>
-                    <td>+{f.points}</td>
+                    <td className="nowrap">{label(f.factor)}</td>
+                    <td className="mono right nowrap">+{f.points}</td>
                     <td>
                       {f.detail}
-                      <div className="muted mono">{JSON.stringify(f.value)}</div>
+                      <span className="row-sub mono">{JSON.stringify(f.value)}</span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-          <p className="muted small">{data.disclaimer}</p>
+          <p className="hint">{data.disclaimer}</p>
         </Card>
       </div>
       <Card title="Uncertainty">
@@ -133,7 +151,8 @@ function Report({ changeId }: { changeId: string }) {
         />
         {hidden.length > 0 && (
           <>
-            <p className="small">Possible hidden callers (unresolved call sites that name a changed method):</p>
+            <h3>Possible hidden callers</h3>
+            <p className="hint">Unresolved call sites that name a changed method.</p>
             <ul className="plain small mono">
               {hidden.map((h, i) => (
                 <li key={i}>
@@ -161,8 +180,8 @@ function ChangedFiles({ changeId }: { changeId: string }) {
           <thead>
             <tr>
               <th>File</th>
-              <th>Change</th>
-              <th>Lines</th>
+              <th className="hide-sm">Change</th>
+              <th className="right">Lines</th>
               <th>Mapped to symbols</th>
             </tr>
           </thead>
@@ -172,11 +191,11 @@ function ChangedFiles({ changeId }: { changeId: string }) {
                 <td className="mono">
                   {f.old_path && f.new_path && f.old_path !== f.new_path ? `${f.old_path} → ${f.new_path}` : f.new_path ?? f.old_path}
                 </td>
-                <td>{label(f.change_type)}</td>
-                <td className="mono">
+                <td className="hide-sm">{label(f.change_type)}</td>
+                <td className="mono right nowrap">
                   <span className="add">+{f.added_lines}</span> <span className="del">−{f.deleted_lines}</span>
                 </td>
-                <td>
+                <td className="nowrap">
                   <Badge value={f.mapping_status === "MAPPED" ? "SUCCEEDED" : f.mapping_status === "NON_PYTHON" && f.role === "DOC" ? "NONE" : "PARTIAL"} text={label(f.mapping_status)} />
                 </td>
               </tr>
@@ -197,20 +216,20 @@ function ChangedSymbols({ changeId }: { changeId: string }) {
         <thead>
           <tr>
             <th>Symbol</th>
-            <th>Kind</th>
+            <th className="hide-sm">Kind</th>
             <th>Change</th>
-            <th>Details</th>
+            <th className="hide-sm">What changed</th>
           </tr>
         </thead>
         <tbody>
           {data.items.map((s) => (
             <tr key={s.id}>
               <td className="mono">{s.qualified_name}</td>
-              <td>{label(s.symbol_kind)}</td>
-              <td>
+              <td className="hide-sm">{label(s.symbol_kind)}</td>
+              <td className="nowrap">
                 <Badge value={s.change_kind === "REMOVED" ? "FAILED" : s.change_kind === "ADDED" ? "SUCCEEDED" : "PARTIAL"} text={label(s.change_kind)} />
               </td>
-              <td className="small">
+              <td className="small hide-sm">
                 {[
                   s.signature_changed && "signature",
                   s.body_changed && "body",
@@ -264,23 +283,27 @@ function ImpactItems({ changeId }: { changeId: string }) {
             <tr>
               <th>Symbol</th>
               <th>Strength</th>
-              <th>Distance</th>
-              <th>Because of</th>
+              <th className="right">Steps</th>
+              <th className="hide-sm">Because of</th>
             </tr>
           </thead>
           <tbody>
             {data.items.map((item) => (
               <Fragment key={item.id}>
-                <tr className="clickable" onClick={() => setOpen(open === item.id ? null : item.id)}>
+                <tr
+                  className={open === item.id ? "clickable open" : "clickable"}
+                  onClick={() => setOpen(open === item.id ? null : item.id)}
+                  title="Show the path from the change"
+                >
                   <td className="mono">
                     {item.qualified_name}
                     {item.is_test && <span className="tag">test</span>}
                   </td>
-                  <td>
+                  <td className="nowrap">
                     <Badge value={item.strength === "CHANGED" ? "RUNNING" : item.strength === "HEURISTIC" ? "HEURISTIC" : item.strength === "IMPORT_ONLY" ? "STATIC" : "SUCCEEDED"} text={label(item.strength)} />
                   </td>
-                  <td>{item.depth}</td>
-                  <td className="small">
+                  <td className="mono right">{item.depth}</td>
+                  <td className="small hide-sm">
                     <span className="mono">{item.seed_qualified_name}</span> · {label(item.seed_reason)}
                     {item.graph === "BASE" && <span className="muted"> (base revision)</span>}
                   </td>
@@ -369,10 +392,10 @@ function Plans({ changeId }: { changeId: string }) {
           <thead>
             <tr>
               <th>Plan</th>
-              <th>Policy</th>
+              <th className="hide-sm">Policy</th>
               <th>Scope</th>
-              <th>Selected</th>
-              <th>Created</th>
+              <th className="right">Selected</th>
+              <th>When</th>
             </tr>
           </thead>
           <tbody>
@@ -383,14 +406,16 @@ function Plans({ changeId }: { changeId: string }) {
                     {shortSha(p.id)}
                   </Link>
                 </td>
-                <td>{label(p.policy)}</td>
-                <td>
+                <td className="hide-sm">{label(p.policy)}</td>
+                <td className="nowrap">
                   <Badge value={p.scope} />
                 </td>
-                <td>
+                <td className="mono right">
                   {p.selected_tests} / {p.total_tests}
                 </td>
-                <td>{formatTime(p.created_at)}</td>
+                <td>
+                  <When iso={p.created_at} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -398,4 +423,9 @@ function Plans({ changeId }: { changeId: string }) {
       )}
     </Card>
   );
+}
+
+/** Branch and tag names as typed; full commit ids shortened. */
+function shortRef(ref: string): string {
+  return /^[0-9a-f]{20,}$/.test(ref) ? shortSha(ref) : ref;
 }

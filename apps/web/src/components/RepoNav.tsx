@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { Breadcrumbs } from "@/components/ui";
+import { repoSlug } from "@/lib/format";
 import type { Repository } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 
@@ -20,19 +22,27 @@ export function RepoHeader({ id }: { id: string }) {
   const base = `/repositories/${id}`;
   return (
     <div className="repo-header">
-      <div className="repo-title">
-        <Link href="/" className="muted">
-          Repositories
-        </Link>
-        <span className="sep">/</span>
-        <strong>{data ? `${data.owner}/${data.name.split("/").pop()}` : "…"}</strong>
+      <Breadcrumbs items={[["Repositories", "/"]]} />
+      <h1>{data ? repoSlug(data.canonical_url) : "…"}</h1>
+      <div className="repo-meta">
+        {data && (
+          <a href={data.canonical_url} target="_blank" rel="noreferrer">
+            {data.canonical_url.replace(/^https?:\/\//, "")} ↗
+          </a>
+        )}
+        {data?.default_branch && <span>default branch {data.default_branch}</span>}
       </div>
       <nav className="tabs" aria-label="Repository">
         {TABS.map(([name, suffix]) => {
           const href = base + suffix;
           const active = suffix ? pathname.startsWith(href) : pathname === base;
           return (
-            <Link key={name} href={href} className={active ? "tab active" : "tab"}>
+            <Link
+              key={name}
+              href={href}
+              className={active ? "tab active" : "tab"}
+              aria-current={active ? "page" : undefined}
+            >
               {name}
             </Link>
           );

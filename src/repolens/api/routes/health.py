@@ -21,6 +21,8 @@ class Health(BaseModel):
     version: str
     # True when the instance refuses every mutation (REPOLENS_READ_ONLY).
     read_only: bool
+    # False when test runs and collection are unavailable (REPOLENS_SANDBOX_ENABLED=false).
+    sandbox: bool
 
 
 class ReadinessCheck(BaseModel):
@@ -37,7 +39,12 @@ class Readiness(BaseModel):
 @router.get("/health", response_model=Health)
 def health(settings: SettingsDep) -> Health:
     """Liveness: the process is up. Does not touch dependencies."""
-    return Health(status="ok", version=repolens.__version__, read_only=settings.read_only)
+    return Health(
+        status="ok",
+        version=repolens.__version__,
+        read_only=settings.read_only,
+        sandbox=settings.sandbox_enabled,
+    )
 
 
 @router.get("/ready", response_model=Readiness, responses={503: {"model": Readiness}})

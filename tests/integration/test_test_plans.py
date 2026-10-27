@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session, sessionmaker
 
+from repolens.config import Settings
+from repolens.worker.handlers import build_handlers
 from repolens.worker.runtime import Worker
 from tests.integration.conftest import AUTH, register, run_change
 from tests.support import projects
@@ -136,3 +140,28 @@ def test_plan_requires_completed_impact(client: TestClient, inventory: FixtureRe
     response = client.post(f"/api/impact/{queued['id']}/test-plan", json={}, headers=AUTH)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "impact_not_ready"
+
+
+def test_plans_work_without_a_sandbox(
+    client: TestClient,
+    worker: Worker,
+    inventory: FixtureRepo,
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+) -> None:
+    impact_id = run_change(client, worker, inventory, projects.CHANGE_WITH_TAX_BODY)
+    plan, items = plan_for(client, impact_id)
+    assert selected(items)
+    # A run queued before the sandbox was switched off fails without touching Docker.
+    response = client.post("/api/test-runs", json={"plan_id": plan["id"]}, headers=AUTH)
+    assert response.status_code == 202, response.text
+    off = settings.model_copy(update={"sandbox_enabled": False, "docker_binary": "/nonexistent"})
+    off_worker = Worker(
+        session_factory, build_handlers(off), worker_id="no-sandbox", retry_backoff=timedelta(0)
+    )
+    assert off_worker.run_once()
+    run = client.get(f"/api/test-runs/{response.json()['id']}").json()
+    assert run["status"] == "COMPLETED"
+    assert run["outcome"] == "INFRASTRUCTURE_ERROR"
+    assert "sandbox_unavailable" in run["outcome_reason"]
+    assert run["job"]["status"] == "FAILED"

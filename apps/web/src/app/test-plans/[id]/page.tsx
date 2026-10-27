@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 
-import { Badge, Breadcrumbs, Card, Empty, ErrorPanel, KeyValues, Loading, ReadOnlyNotice } from "@/components/ui";
+import { Badge, Breadcrumbs, Card, Empty, ErrorPanel, KeyValues, Loading, ReadOnlyNotice, SandboxNotice } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { formatDuration, label } from "@/lib/format";
 import type { ChangeSet, Page, PlanEvidence, TestPlan, TestPlanItem, TestRun } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
-import { useReadOnly } from "@/lib/useReadOnly";
+import { useCapabilities } from "@/lib/useReadOnly";
 
 export default function TestPlanPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,7 +20,7 @@ export default function TestPlanPage() {
   const [coverage, setCoverage] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
-  const readOnly = useReadOnly();
+  const { readOnly, sandbox } = useCapabilities();
   if (plan.error) return <ErrorPanel error={plan.error} />;
   if (!plan.data) return <Loading what="Loading test plan" />;
   const p = plan.data;
@@ -53,9 +53,14 @@ export default function TestPlanPage() {
           ]}
         />
       )}
-      <h1>
-        Test plan <Badge value={p.scope} text={`${label(p.scope)} scope`} />
-      </h1>
+      <div className="page-head">
+        <h1>
+          Test plan <Badge value={p.scope} text={`${label(p.scope)} scope`} />
+        </h1>
+        <p className="lede">
+          Tests ranked by how directly they depend on the change. Select a row to see the evidence behind it.
+        </p>
+      </div>
       {p.fallback_reason && (
         <div className="warn-panel">
           <strong>Full-suite fallback.</strong> The impact analysis could not vouch for a targeted run:{" "}
@@ -69,14 +74,18 @@ export default function TestPlanPage() {
         </div>
       )}
       <Card
+        title="Run"
         actions={
-          readOnly === true ? undefined : (
+          readOnly === true || sandbox === false ? undefined : (
           <>
             <label className="checkbox">
               <input type="checkbox" checked={coverage} onChange={(e) => setCoverage(e.target.checked)} />
               Collect coverage
             </label>
-            <button onClick={run} disabled={busy || readOnly === null || (p.selected_tests === 0 && p.scope !== "FULL_SUITE")}>
+            <button
+              onClick={run}
+              disabled={busy || readOnly === null || sandbox === null || (p.selected_tests === 0 && p.scope !== "FULL_SUITE")}
+            >
               {busy ? "Starting…" : p.scope === "FULL_SUITE" ? "Run full suite in sandbox" : `Run ${p.selected_tests} selected tests`}
             </button>
           </>
@@ -84,6 +93,12 @@ export default function TestPlanPage() {
         }
       >
         {readOnly === true && <ReadOnlyNotice what="running tests" />}
+        {readOnly === false && sandbox === false && (
+          <SandboxNotice>
+            Running tests needs the Docker sandbox, which this instance does not have. The selection below is still
+            yours to run locally: <code className="inline-code">pytest</code> with the listed node ids.
+          </SandboxNotice>
+        )}
         <KeyValues
           items={[
             ["Selected", `${p.selected_tests} of ${p.total_tests} tests`],
@@ -106,31 +121,29 @@ export default function TestPlanPage() {
       </Card>
       <Card title={`Not selected (${excluded.length})`}>
         {excluded.length === 0 ? (
-          <p className="muted small">Every test was selected.</p>
+          <p className="muted">Every test was selected.</p>
         ) : (
           <table className="table small">
             <tbody>
               {excluded.map((i) => (
                 <tr key={i.id}>
                   <td className="mono">{i.node_id}</td>
-                  <td>
+                  <td className="nowrap">
                     <Badge value={i.exclusion_reason === "BUDGET" ? "PARTIAL" : "NONE"} text={label(i.exclusion_reason)} />
                   </td>
-                  <td className="muted">{i.evidence.length ? `strongest evidence: ${label(i.evidence[0]?.kind)}` : "no evidence linking it to the change"}</td>
+                  <td className="muted hide-sm">{i.evidence.length ? `strongest evidence: ${label(i.evidence[0]?.kind)}` : "no evidence linking it to the change"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         {notCollected.length > 0 && (
-          <p className="muted small">
-            Not collectable by pytest (excluded): {notCollected.join(", ")}
-          </p>
+          <p className="hint">Not collectable by pytest (excluded): {notCollected.join(", ")}</p>
         )}
       </Card>
       {change.data && (
         <p className="small">
-          <Link href={`/impact/${p.change_set_id}`}>Back to the impact report</Link>
+          <Link href={`/impact/${p.change_set_id}`}>← Back to the impact report</Link>
         </p>
       )}
     </>
@@ -143,22 +156,26 @@ function PlanTable({ items }: { items: TestPlanItem[] }) {
     <table className="table small">
       <thead>
         <tr>
-          <th>#</th>
+          <th className="right">#</th>
           <th>Test</th>
-          <th>Score</th>
-          <th>Strongest evidence</th>
-          <th>Measured duration</th>
+          <th className="right">Score</th>
+          <th className="hide-sm">Strongest evidence</th>
+          <th className="right hide-sm">Measured</th>
         </tr>
       </thead>
       <tbody>
         {items.map((item) => (
           <Fragment key={item.id}>
-            <tr className="clickable" onClick={() => setOpen(open === item.id ? null : item.id)}>
-              <td>{item.rank}</td>
+            <tr
+              className={open === item.id ? "clickable open" : "clickable"}
+              onClick={() => setOpen(open === item.id ? null : item.id)}
+              title="Show the evidence for this test"
+            >
+              <td className="mono right muted nowrap">{item.rank}</td>
               <td className="mono">{item.node_id}</td>
-              <td>{item.score}</td>
-              <td>{item.evidence[0] && <EvidenceBadge evidence={item.evidence[0]} />}</td>
-              <td>{item.estimated_seconds !== null ? formatDuration(item.estimated_seconds * 1000) : "—"}</td>
+              <td className="mono right">{item.score}</td>
+              <td className="hide-sm">{item.evidence[0] && <EvidenceBadge evidence={item.evidence[0]} />}</td>
+              <td className="mono right hide-sm">{item.estimated_seconds !== null ? formatDuration(item.estimated_seconds * 1000) : "—"}</td>
             </tr>
             {open === item.id && (
               <tr className="explain-row">

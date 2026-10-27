@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 
 import { apiFetch, type Health } from "@/lib/api";
 
-let cached: Promise<boolean> | null = null;
+let cached: Promise<Health> | null = null;
 
-function loadReadOnly(): Promise<boolean> {
+function loadHealth(): Promise<Health> {
   if (!cached) {
-    const request = apiFetch<Health>("/health").then((health) => health.read_only === true);
+    const request = apiFetch<Health>("/health");
     cached = request;
     // Retry on the next use if the API could not be reached.
     request.catch(() => {
@@ -23,17 +23,30 @@ export function resetReadOnlyCache(): void {
   cached = null;
 }
 
+export interface Capabilities {
+  /** The API refuses every mutation (REPOLENS_READ_ONLY). */
+  readOnly: boolean | null;
+  /**
+   * Test runs and sandboxed collection are available. APIs that predate the field always had
+   * a sandbox, so a missing value counts as available.
+   */
+  sandbox: boolean | null;
+}
+
+const UNKNOWN: Capabilities = { readOnly: null, sandbox: null };
+
 /**
- * Whether the API refuses every mutation (REPOLENS_READ_ONLY). ``null`` until known, or if the
- * API could not be reached; callers treat that as "do not offer actions yet".
+ * What this API instance allows. Each field is ``null`` until known, or if the API could not
+ * be reached; callers treat that as "do not offer the action yet".
  */
-export function useReadOnly(): boolean | null {
-  const [readOnly, setReadOnly] = useState<boolean | null>(null);
+export function useCapabilities(): Capabilities {
+  const [capabilities, setCapabilities] = useState<Capabilities>(UNKNOWN);
   useEffect(() => {
     let cancelled = false;
-    loadReadOnly().then(
-      (value) => {
-        if (!cancelled) setReadOnly(value);
+    loadHealth().then(
+      (health) => {
+        if (cancelled) return;
+        setCapabilities({ readOnly: health.read_only === true, sandbox: health.sandbox !== false });
       },
       () => undefined,
     );
@@ -41,5 +54,13 @@ export function useReadOnly(): boolean | null {
       cancelled = true;
     };
   }, []);
-  return readOnly;
+  return capabilities;
+}
+
+/**
+ * Whether the API refuses every mutation (REPOLENS_READ_ONLY). ``null`` until known, or if the
+ * API could not be reached; callers treat that as "do not offer actions yet".
+ */
+export function useReadOnly(): boolean | null {
+  return useCapabilities().readOnly;
 }

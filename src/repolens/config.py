@@ -62,7 +62,9 @@ class Settings(BaseSettings):
     max_jobs_per_repository: int = Field(default=2, ge=1)
     max_concurrent_sandboxes: int = Field(default=2, ge=1)
 
-    # Sandboxed test execution (Docker). Only the configured image may be used.
+    # Sandboxed test execution (Docker). Only the configured image may be used. Off on hosts
+    # without a Docker daemon: test runs and collection are refused, test plans still work.
+    sandbox_enabled: bool = True
     sandbox_image: str = "repolens-sandbox:py3.12-1"
     docker_binary: str = "docker"
     sandbox_memory_mb: int = Field(default=1024, ge=64)
