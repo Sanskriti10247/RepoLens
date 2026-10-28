@@ -26,7 +26,16 @@ describe("ApiStatus", () => {
       "fetch",
       vi.fn(async () => Response.json({ error: { code: "api_unreachable" } }, { status: 502 })),
     );
-    render(<ApiStatus pollMs={60000} />);
+    render(<ApiStatus pollMs={60000} wakeMs={0} />);
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("API unreachable"));
+  });
+
+  it("says the API is waking while a sleeping instance starts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: { code: "api_unreachable" } }, { status: 502 })),
+    );
+    render(<ApiStatus pollMs={60000} />);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Waking the API"));
   });
 });

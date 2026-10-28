@@ -40,7 +40,7 @@ from repolens.services.analysis import (
     IngestionDeps,
     effective_run_id,
 )
-from repolens.services.errors import InvalidInput, NotFound
+from repolens.services.errors import Conflict, InvalidInput, NotFound
 from repolens.services.jobs import (
     JobContext,
     PermanentJobError,
@@ -71,6 +71,15 @@ def execution_policy(settings: Settings) -> ExecutionPolicy:
 # -- request side -------------------------------------------------------------------------
 
 
+def require_sandbox(settings: Settings) -> None:
+    if not settings.sandbox_enabled:
+        raise Conflict(
+            "Test execution is not available on this instance (no sandbox). "
+            "Test plans still work; run the selected tests locally.",
+            code="sandbox_unavailable",
+        )
+
+
 def request_test_run(
     session: Session,
     settings: Settings,
@@ -81,6 +90,7 @@ def request_test_run(
     coverage: bool = True,
 ) -> tuple[TestRun, uuid.UUID]:
     """Queue a run of a test plan's selection, or of a whole suite for an analysis."""
+    require_sandbox(settings)
     if (plan_id is None) == (analysis_id is None):
         raise InvalidInput("Give exactly one of plan_id or analysis_id", code="invalid_request")
     node_ids: list[str] = []
@@ -147,6 +157,7 @@ def request_collection(
     session: Session, settings: Settings, analysis_id: uuid.UUID
 ) -> tuple[TestRun, uuid.UUID]:
     """Queue sandboxed ``pytest --collect-only`` (collection imports repository code)."""
+    require_sandbox(settings)
     if session.get(AnalysisRun, analysis_id) is None:
         raise NotFound("Analysis not found")
     analysis = session.get(AnalysisRun, effective_run_id(session, analysis_id))
@@ -247,6 +258,10 @@ class RunTestsHandler:
                 raise PermanentJobError("Test run not found", category="invalid_job")
             if test_run.status == "COMPLETED":
                 return {"skipped": "already completed"}
+            if not self.settings.sandbox_enabled:
+                raise PermanentJobError(
+                    "Test execution is disabled on this instance", category="sandbox_unavailable"
+                )
             repo = session.get(Repository, test_run.repository_id)
             assert repo is not None  # noqa: S101 - FK
             test_run.status = "RUNNING"
@@ -506,7 +521,8 @@ def _coverage_rows(
 def cleanup_stale_execution(settings: Settings, *, older_than_seconds: float | None = None) -> None:
     """Remove containers and workspaces left behind by crashed workers (run at startup)."""
     age = older_than_seconds or settings.sandbox_timeout_seconds + 900
-    DockerSandbox(settings.docker_binary).remove_stale(age)
+    if settings.sandbox_enabled:
+        DockerSandbox(settings.docker_binary).remove_stale(age)
     root = settings.workspaces_dir
     if root.exists():
         now = time.time()

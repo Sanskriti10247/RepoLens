@@ -36,6 +36,17 @@ def get_session(request: Request) -> Iterator[Session]:
         session.close()
 
 
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def reject_writes_when_read_only(
+    request: Request, settings: Annotated[Settings, Depends(get_app_settings)]
+) -> None:
+    """Deny by default: in read-only mode every non-safe request is refused, token or not."""
+    if settings.read_only and request.method.upper() not in _SAFE_METHODS:
+        raise ApiError(403, "read_only", "This instance is read-only")
+
+
 def require_token(
     settings: Annotated[Settings, Depends(get_app_settings)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],

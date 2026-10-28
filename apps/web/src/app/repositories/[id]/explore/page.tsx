@@ -52,7 +52,7 @@ function Explorer() {
       <aside className="explorer-list">
         <div className="filters">
           <input
-            placeholder="Search symbols (name or qualified name)"
+            placeholder="Search by name or dotted path"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search symbols"
@@ -75,10 +75,15 @@ function Explorer() {
         {results.loading && !results.data && <Loading />}
         {results.data && (
           <>
-            <p className="muted small">
-              {results.data.page.total} symbols · commit <span className="mono">{shortSha(results.data.commit_sha)}</span>
+            <p className="list-meta">
+              {results.data.page.total > results.data.items.length
+                ? `First ${results.data.items.length} of ${results.data.page.total} symbols`
+                : `${results.data.page.total} symbols`}{" "}
+              at <span className="sha">{shortSha(results.data.commit_sha)}</span>
             </p>
-            {results.data.items.length === 0 && <Empty>No symbols match.</Empty>}
+            {results.data.items.length === 0 && (
+              <p className="muted small">Nothing matches. Try part of a name, or clear the kind filter.</p>
+            )}
             <ul className="symbol-list">
               {results.data.items.map((s) => (
                 <li key={s.id}>
@@ -100,7 +105,13 @@ function Explorer() {
         {selected ? (
           <SymbolPanel repoId={id} symbolId={selected} onSelect={select} />
         ) : (
-          <Empty>Select a symbol to see its source, callers, callees and references.</Empty>
+          <div className="explorer-intro">
+            <Empty>Pick a symbol on the left to read its source and see who calls it, what it calls, and what it imports.</Empty>
+            <p className="hint">
+              Search matches short names and dotted paths alike, e.g. <code className="inline-code">module.Class.method</code>.
+              Kinds: mod module, cls class, fn function, m method.
+            </p>
+          </div>
         )}
       </section>
     </div>
@@ -140,12 +151,12 @@ function SymbolPanel({
       >
         <KeyValues
           items={[
-            ["Location", <span key="l" className="mono">{`${s.path}:${s.start_line}-${lastLine}`}</span>],
+            ["Location", <span key="l" className="mono">{`${s.path}:${s.start_line}–${lastLine}`}</span>],
             ["Signature", s.signature ? <code key="s" className="inline-code">{s.signature}</code> : "—"],
             ["Decorators", d.decorators.length ? d.decorators.map((x) => `@${x}`).join(", ") : "—"],
             ["Docstring", s.doc_summary ?? "—"],
             ["Visibility", label(s.visibility)],
-            ["Commit", <span key="c" className="mono">{shortSha(d.commit_sha)}</span>],
+            ["Commit", <span key="c" className="sha" title={d.commit_sha}>{shortSha(d.commit_sha)}</span>],
           ]}
         />
         {s.has_parse_errors && (
@@ -165,11 +176,11 @@ function SymbolPanel({
         {source.data && <SourceView content={source.data.content} highlight={{ start: s.start_line, end: lastLine }} />}
         {!source.data && !source.error && <Loading what="Loading source" />}
       </Card>
-      <div className="grid-2">
+      <div className="columns">
         <NeighbourList title={`Callers (${d.callers_total})`} items={d.callers} onSelect={onSelect} empty="No statically resolved callers." />
         <NeighbourList title={`Callees (${d.callees_total})`} items={d.callees} onSelect={onSelect} empty="Calls no resolved symbols." />
       </div>
-      <div className="grid-2">
+      <div className="columns">
         <NeighbourList title="Dependents (imports, references, subclasses)" items={d.dependents} onSelect={onSelect} empty="None." />
         <NeighbourList title="Dependencies (imports, references, bases)" items={d.dependencies} onSelect={onSelect} empty="None." />
       </div>
@@ -207,9 +218,9 @@ function NeighbourList({
   return (
     <Card title={title}>
       {items.length === 0 ? (
-        <p className="muted small">{empty}</p>
+        <p className="muted">{empty}</p>
       ) : (
-        <ul className="plain">
+        <ul className="rules">
           {items.map((n) => (
             <li key={`${n.edge_type}-${n.symbol.id}`}>
               <button className="link mono" onClick={() => onSelect(n.symbol.id)}>
@@ -254,13 +265,13 @@ function ReferencesCard({
       }
     >
       {shown.length === 0 ? (
-        <p className="muted small">No references.</p>
+        <p className="muted">No outgoing references.</p>
       ) : (
         <table className="table small">
           <thead>
             <tr>
               <th>Line</th>
-              <th>Kind</th>
+              <th className="hide-sm">Kind</th>
               <th>Expression</th>
               <th>Resolution</th>
               <th>Target / reason</th>
@@ -270,9 +281,9 @@ function ReferencesCard({
             {shown.map((r) => (
               <tr key={r.id}>
                 <td className="mono">{r.start_line}</td>
-                <td>{label(r.ref_kind)}</td>
+                <td className="hide-sm">{label(r.ref_kind)}</td>
                 <td className="mono">{r.raw_text}</td>
-                <td>
+                <td className="nowrap">
                   <Badge value={r.resolution_status} />
                 </td>
                 <td className="mono">
@@ -339,10 +350,10 @@ function Neighbourhood({
       }
     >
       {graph.error && <ErrorPanel error={graph.error} />}
-      {graph.data && byDepth.size === 0 && <p className="muted small">No dependencies in this direction.</p>}
+      {graph.data && byDepth.size === 0 && <p className="muted">Nothing in this direction.</p>}
       {[...byDepth.entries()].map(([d, symbols]) => (
         <div key={d} className="depth-group">
-          <div className="muted small">Distance {d}</div>
+          <h3>{d === 1 ? "Directly" : `${d} steps away`}</h3>
           <ul className="plain">
             {symbols.map((s) => (
               <li key={s.id}>

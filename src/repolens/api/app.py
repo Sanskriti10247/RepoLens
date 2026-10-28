@@ -5,11 +5,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine
 
 import repolens
+from repolens.api.dependencies import reject_writes_when_read_only
 from repolens.api.errors import install_error_handlers
 from repolens.api.middleware import request_context
 from repolens.api.routes import (
@@ -52,6 +53,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
+        dependencies=[Depends(reject_writes_when_read_only)],
     )
     app.state.settings = settings
     app.state.engine = db_engine

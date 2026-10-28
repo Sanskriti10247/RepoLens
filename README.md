@@ -415,6 +415,11 @@ access. [docs/deployment.md](docs/deployment.md) covers setup, that trade-off an
 alternatives, upgrades and backups; [docs/operations.md](docs/operations.md) covers the
 operating model.
 
+A small demo instance runs as one container on Render's free tier, with the web app on
+Vercel. It analyzes public repositories up to 50 MiB, but does not run tests (no Docker
+there), and its data resets to a recorded snapshot whenever the service restarts or wakes
+from sleep. See [Free hosting](docs/deployment.md#free-hosting-vercel--render).
+
 ## Known analysis limits
 
 Python is dynamic, so static analysis has blind spots:

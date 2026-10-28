@@ -48,9 +48,10 @@ The worker has to start Docker containers next to itself. That rules out:
   They have no Docker daemon, no long-running worker process and no persistent local disk for
   mirrors.
 - PaaS without Docker access (Heroku, Render, Railway, Fly.io Machines, App Platform and
-  similar). The API and web app would run there, but sandboxed test runs and
-  `pytest --collect-only` need a Docker daemon. Without one, every run ends in
-  `INFRASTRUCTURE_ERROR`.
+  similar). The API, worker and web app run there, but sandboxed test runs and
+  `pytest --collect-only` need a Docker daemon. Set `REPOLENS_SANDBOX_ENABLED=false`: those
+  requests are then refused with 409 and code `sandbox_unavailable`, and `/api/health`
+  reports `"sandbox": false`. Test plans still work.
 - Kubernetes as is. The compose layout does not translate directly. Workers
   would need a dedicated node pool with Docker, or a different sandbox backend, which RepoLens
   does not implement.
@@ -58,7 +59,117 @@ The worker has to start Docker containers next to itself. That rules out:
   path translation and resource limits behave differently there.
 
 The web app on its own can be hosted anywhere Node.js runs, as long as it can reach the API
-privately. Analysis, impact and test execution still need the worker on a Docker host.
+privately. A small instance without test execution fits free tiers; see
+[Free hosting](#free-hosting-vercel--render). Test execution still needs the worker on a
+Docker host.
+
+## Free hosting (Vercel + Render)
+
+Demo mode runs a small working instance on free tiers: the web app on Vercel and everything
+else in one Render web service. The image in `infra/docker/demo/Dockerfile` holds the API,
+the worker and a small PostgreSQL server (the Debian package of the base image, version 17).
+On every start it creates an empty database, restores `infra/demo/snapshot.tar.gz` (the
+database plus the Git mirrors the API reads source from), starts the API and, once the API
+listens, the worker. If either process exits, the container exits and Render restarts it.
+
+Visitors can register public GitHub repositories, analyze them, explore the graph, run impact
+analysis, build test plans and ask questions. Tests are not run: there is no Docker daemon,
+so the image sets `REPOLENS_SANDBOX_ENABLED=false`. Test runs and sandboxed collection are
+refused with 409 and code `sandbox_unavailable`, `/api/health` reports `"sandbox": false`,
+and test plans fall back to the statically discovered tests. The worker never calls
+`docker`.
+
+**Nothing is kept.** The database and mirrors live in the container's filesystem. Every
+restart, deploy, or wake-up from sleep goes back to the snapshot, and repositories visitors
+added are gone. Render free web services sleep after 15 minutes without traffic.
+
+The snapshot holds `mahmoud/boltons` at `5150802` with an impact report against `574393a`, a
+test plan (108 of 399 tests, confirmed with sandboxed collection) and a sandboxed run of
+those tests (203 passed), recorded on a Docker host. It is about 3 MB.
+
+The image sets limits sized for 512 MiB of memory and a tenth of a CPU. Any of them can be
+overridden in Render's environment:
+
+| Setting | Demo image | Default |
+|---|---|---|
+| `REPOLENS_MAX_REPOSITORY_SIZE_MB` | 50 | 500 |
+| `REPOLENS_MAX_FILE_COUNT` | 5000 | 50000 |
+| `REPOLENS_MIN_FREE_DISK_MB` | 200 | 1024 |
+| `REPOLENS_MAX_JOBS_PER_REPOSITORY` | 1 | 2 |
+| `REPOLENS_GIT_TIMEOUT_SECONDS` | 120 | 300 |
+
+Larger repositories fail with a message such as `repository_too_large: Repository is larger
+than 50 MiB` (GitHub's reported size is checked before anything is fetched). The worker runs
+one job at a time, so a second visitor's analysis waits in the queue.
+
+The image includes the `llm` extra. It is imported only when `REPOLENS_LLM_PROVIDER` is set,
+so it costs no memory otherwise. Questions are answered from the analysis without a model by
+default; to use one, set `REPOLENS_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` on Render,
+and read [operations.md](operations.md) first about what gets sent.
+
+`REPOLENS_READ_ONLY=true` still turns the image into a showcase: every request other than
+GET, HEAD and OPTIONS is refused with 403 and code `read_only`, and the worker is not
+started.
+
+Measured with `docker run --memory 512m --memory-swap 512m --cpus 0.1 -e PORT=10000`,
+registering and analyzing through the API. The host was busy (load average 7 to 12 on 12
+cores), so the times are ranges over two runs:
+
+| | |
+|---|---|
+| Container start to `/api/ready` returning 200 | 55 to 64 s (read-only mode: the same) |
+| Analysis of `pallets/itsdangerous` at `HEAD` | 9 to 13 s |
+| Impact `2.1.2..2.2.0` on `itsdangerous`, including analysis of both revisions | 8 to 11 s |
+| Analysis of `pallets/flask` at `HEAD` | 36 to 54 s |
+| Impact `3.0.0..3.1.0` on `flask` | 45 to 67 s |
+| Peak cgroup memory (`memory.peak`, includes page cache), after both repositories | 277 to 317 MiB |
+| Anonymous memory after both repositories | 175 to 179 MiB |
+| VmHWM, API / worker / largest PostgreSQL process | 103 MB / 92 MB / 48 MB |
+
+Start-up is mostly the snapshot restore and Python imports; the read-only image measured
+35 s on a quiet host.
+The first request after Render wakes the service waits for all of it. The web app's `/api`
+proxy allows up to 60 seconds.
+
+Render:
+
+- New Web Service, language Docker, from the repository.
+- Dockerfile path `infra/docker/demo/Dockerfile`, Docker build context directory `.`.
+- Instance type Free. Health check path `/api/ready`.
+- Environment: `REPOLENS_API_TOKEN`, a long random value
+  (`python -c "import secrets; print(secrets.token_urlsafe(32))"`). Without it the instance
+  starts, logs `demo_writes_disabled` and refuses every change with `mutations_disabled`.
+  Render sets `PORT`, and the image reads it. Do not attach a disk.
+
+Vercel:
+
+- Import the repository with Root Directory `apps/web` and Framework Preset Next.js. Leave
+  "Include source files outside of the Root Directory" on, so the npm workspace at the
+  repository root installs, and leave the build and install commands at their defaults.
+- Environment: `REPOLENS_API_URL=https://<your-service>.onrender.com` and the same
+  `REPOLENS_API_TOKEN` as on Render. The web app's server adds it to requests it forwards;
+  browsers never see it. Do not set `REPOLENS_WEB_STANDALONE`.
+- `REPOLENS_TRUST_FORWARDED_HOST` is not needed: Vercel passes the public host through as
+  `Host`, which already matches the browser's `Origin`.
+
+Anyone who can open the web app can register and analyze repositories with that token. The
+limits above, and the fact that nothing outlives a restart, are what keep that cheap.
+
+To rebuild the snapshot, run the normal local stack (README, "Getting started") against a
+separate database and data directory, for example `repolens_demo` and `var/demo-data`, with
+the sandbox image built. Register the repository, analyze the two revisions through an
+impact analysis, run collection, create a test plan and run it, then:
+
+```bash
+DEMO_DB=repolens_demo DEMO_DATA_DIR=var/demo-data ./scripts/make_demo_snapshot.sh
+docker build -f infra/docker/demo/Dockerfile -t repolens-demo .
+docker run --rm --memory 512m --memory-swap 512m -e PORT=10000 -p 127.0.0.1:18300:10000 repolens-demo
+```
+
+The script dumps a scratch copy of the database with worker and lease fields cleared and the
+parse cache emptied, and stops if the dump contains this host's name, home directory or the
+API token. Questions are answered on request and not stored, so they are not part of the
+snapshot.
 
 ## The Docker socket
 

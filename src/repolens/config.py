@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8100, ge=1, le=65535)
     # Bearer token required for mutating endpoints. None disables them entirely.
     api_token: SecretStr | None = None
+    # Showcase mode: every mutating endpoint answers 403 and nothing needs a worker or Docker.
+    read_only: bool = False
     cors_origins: list[str] = ["http://127.0.0.1:3100", "http://localhost:3100"]
 
     data_dir: Path = Path("var")
@@ -60,7 +62,9 @@ class Settings(BaseSettings):
     max_jobs_per_repository: int = Field(default=2, ge=1)
     max_concurrent_sandboxes: int = Field(default=2, ge=1)
 
-    # Sandboxed test execution (Docker). Only the configured image may be used.
+    # Sandboxed test execution (Docker). Only the configured image may be used. Off on hosts
+    # without a Docker daemon: test runs and collection are refused, test plans still work.
+    sandbox_enabled: bool = True
     sandbox_image: str = "repolens-sandbox:py3.12-1"
     docker_binary: str = "docker"
     sandbox_memory_mb: int = Field(default=1024, ge=64)

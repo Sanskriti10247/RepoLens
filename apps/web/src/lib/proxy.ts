@@ -87,6 +87,17 @@ export async function forward(
   } catch {
     return errorResponse(502, "api_unreachable", "RepoLens API is unreachable");
   }
+  // The API's own 401 says "invalid bearer token", which a visitor cannot act on. The token
+  // is this server's configuration, so say which side of it is wrong.
+  if (mutating && upstream.status === 401) {
+    return errorResponse(
+      401,
+      "web_token_mismatch",
+      config.apiToken
+        ? "The API rejected this web app's REPOLENS_API_TOKEN; it must be the same value as on the API."
+        : "This web app has no REPOLENS_API_TOKEN set, so the API refuses changes.",
+    );
+  }
   const responseHeaders = new Headers();
   for (const name of FORWARDED_RESPONSE_HEADERS) {
     const value = upstream.headers.get(name);

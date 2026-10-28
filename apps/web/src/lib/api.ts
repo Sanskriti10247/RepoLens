@@ -45,6 +45,18 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (await response.json()) as T;
 }
 
+export interface Health {
+  status: "ok";
+  version: string;
+  /** The API refuses every mutation (REPOLENS_READ_ONLY). */
+  read_only: boolean;
+  /**
+   * Test runs and sandboxed collection are available (false where the host has no Docker, in
+   * which case those requests fail with 409 ``sandbox_unavailable``). Absent on older APIs.
+   */
+  sandbox?: boolean;
+}
+
 export interface ReadinessCheck {
   name: string;
   ok: boolean;

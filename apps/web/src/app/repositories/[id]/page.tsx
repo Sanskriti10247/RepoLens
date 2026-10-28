@@ -4,11 +4,27 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
-import { Badge, Card, Empty, ErrorPanel, KeyValues, Loading, Stat } from "@/components/ui";
+import {
+  Badge,
+  Card,
+  Empty,
+  ErrorPanel,
+  FailureNote,
+  KeyValues,
+  Loading,
+  Progress,
+  ReadOnlyNotice,
+  SandboxNotice,
+  Stat,
+  Stats,
+  Tally,
+  When,
+} from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
-import { TERMINAL_ANALYSIS, formatBytes, formatDuration, formatTime, label, shortSha } from "@/lib/format";
+import { TERMINAL_ANALYSIS, formatBytes, formatDuration, label, shortSha } from "@/lib/format";
 import type { Analysis, AnalysisSummary, FilePage, Page, TestCase, TestRun, Warning } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useCapabilities, useReadOnly } from "@/lib/useReadOnly";
 
 export default function RepositoryOverview() {
   const { id } = useParams<{ id: string }>();
@@ -24,34 +40,46 @@ export default function RepositoryOverview() {
       {analyses.error && <ErrorPanel error={analyses.error} />}
       {analyses.loading && !analyses.data && <Loading what="Loading analyses" />}
       {analyses.data && analyses.data.items.length === 0 && (
-        <Empty>This repository has not been analyzed yet.</Empty>
+        <Empty>No analysis has been recorded for this repository yet.</Empty>
       )}
       {current && <AnalysisDetail analysisId={current} onChange={analyses.reload} />}
       {analyses.data && analyses.data.items.length > 1 && (
-        <Card title="Analysis history">
+        <Card title="Earlier analyses">
           <table className="table">
             <thead>
               <tr>
                 <th>Requested</th>
                 <th>Status</th>
-                <th>Commit</th>
-                <th>Created</th>
+                <th className="hide-sm">Commit</th>
+                <th>When</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {analyses.data.items.map((a) => (
                 <tr key={a.id} className={a.id === current ? "selected" : undefined}>
-                  <td className="mono">{a.requested_ref}</td>
+                  <td className="mono" title={a.requested_ref}>
+                    {a.requested_ref.length > 24 ? shortSha(a.requested_ref) : a.requested_ref}
+                  </td>
                   <td>
                     <Badge value={a.status} />
                   </td>
-                  <td className="mono">{shortSha(a.commit_sha)}</td>
-                  <td>{formatTime(a.created_at)}</td>
+                  <td className="hide-sm">
+                    <span className="sha" title={a.commit_sha ?? undefined}>
+                      {shortSha(a.commit_sha)}
+                    </span>
+                  </td>
                   <td>
-                    <button className="link" onClick={() => setSelected(a.id)}>
-                      View
-                    </button>
+                    <When iso={a.created_at} />
+                  </td>
+                  <td className="right">
+                    {a.id === current ? (
+                      <span className="muted small">shown above</span>
+                    ) : (
+                      <button className="link" onClick={() => setSelected(a.id)}>
+                        View
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -64,6 +92,7 @@ export default function RepositoryOverview() {
 }
 
 function AnalyzeForm({ repoId, onQueued }: { repoId: string; onQueued: () => void }) {
+  const readOnly = useReadOnly();
   const [ref, setRef] = useState("HEAD");
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,17 +109,25 @@ function AnalyzeForm({ repoId, onQueued }: { repoId: string; onQueued: () => voi
       setBusy(false);
     }
   }
+  if (readOnly === true) return <ReadOnlyNotice what="analyzing new revisions" />;
   return (
-    <form className="form-row compact" onSubmit={submit}>
-      <label className="narrow">
-        Analyze revision
-        <input value={ref} onChange={(e) => setRef(e.target.value)} aria-label="Revision to analyze" />
-      </label>
-      <button type="submit" disabled={busy}>
-        {busy ? "Queueing…" : "Analyze"}
-      </button>
+    <>
+      <form className="revision-form" onSubmit={submit}>
+        <label>
+          Analyze another revision
+          <input
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+            aria-label="Revision to analyze"
+            spellCheck={false}
+          />
+        </label>
+        <button type="submit" className="secondary" disabled={busy || readOnly === null}>
+          {busy ? "Queueing…" : "Analyze"}
+        </button>
+      </form>
       {error && <ErrorPanel error={error} title="Could not queue the analysis" />}
-    </form>
+    </>
   );
 }
 
@@ -105,57 +142,76 @@ function AnalysisDetail({ analysisId, onChange }: { analysisId: string; onChange
   const counts = (data.counts ?? {}) as Record<string, unknown>;
   const references = (counts.references_by_status ?? {}) as Record<string, number>;
   const edges = (counts.edges_by_type ?? {}) as Record<string, number>;
+  const queued = data.status === "QUEUED";
   return (
     <>
       <Card
         title={
           <>
-            Analysis of <code className="inline-code">{data.requested_ref}</code>{" "}
+            Analysis of{" "}
+            <span className="mono" title={data.requested_ref}>
+              {data.requested_ref.length > 24 ? shortSha(data.requested_ref) : data.requested_ref}
+            </span>{" "}
             <Badge value={data.status} />
           </>
         }
       >
         <KeyValues
           items={[
-            ["Commit", <span key="c" className="mono">{data.snapshot?.commit_sha ?? "not resolved yet"}</span>],
+            [
+              "Commit",
+              <span key="c" className="sha" title={data.snapshot?.commit_sha}>
+                {data.snapshot ? shortSha(data.snapshot.commit_sha) : "not resolved yet"}
+              </span>,
+            ],
             ["Resolved ref", data.resolved_ref ? `${data.resolved_ref} (${label(data.resolved_ref_kind)})` : "—"],
-            ["Committed", formatTime(data.snapshot?.committed_at)],
-            ["Parser", <span key="p" className="mono small">{data.parser_version}</span>],
+            ["Committed", <When key="w" iso={data.snapshot?.committed_at} />],
+            ["Parser", <span key="p" className="mono small muted">{data.parser_version}</span>],
             ["Job", data.job ? <Badge key="j" value={data.job.status} text={`${label(data.job.status)} (attempt ${data.job.attempts}/${data.job.max_attempts})`} /> : "—"],
             ["Duration", formatDuration(Object.values(data.timings_ms ?? {}).reduce<number>((s, v) => s + (typeof v === "number" ? v : 0), 0) || null)],
           ]}
         />
         {data.reused_run_id && (
-          <p className="muted small">Results reused from an identical earlier analysis of the same commit.</p>
+          <p className="hint">Results reused from an identical earlier analysis of the same commit.</p>
         )}
-        {data.error && <div className="error-panel">{data.error}</div>}
-        {!done && !data.error && <p className="muted">Fetching, inventorying and parsing… this page updates automatically.</p>}
+        {data.error && <FailureNote>{data.error}</FailureNote>}
+        {!TERMINAL_ANALYSIS.has(data.status) && (
+          <Progress
+            doing={queued ? "Queued" : "Analyzing"}
+            since={queued ? data.created_at : (data.started_at ?? data.created_at)}
+            detail={
+              queued
+                ? "waiting for a worker to pick it up"
+                : "fetching, inventorying and parsing; this page refreshes by itself"
+            }
+          />
+        )}
       </Card>
       {done && data.snapshot && (
         <>
-          <div className="stats">
+          <Stats>
             <Stat label="Files" value={data.snapshot.file_count ?? "—"} hint={formatBytes(data.snapshot.total_bytes)} />
-            <Stat label="Python files" value={String(counts.python_files ?? "—")} />
-            <Stat label="Symbols" value={String(counts.symbols ?? "—")} />
-            <Stat label="References" value={String(counts.references ?? "—")} />
+            <Stat label="Python files" value={num(counts.python_files)} />
+            <Stat label="Symbols" value={num(counts.symbols)} />
+            <Stat label="References" value={num(counts.references)} />
             <Stat
               label="Tests discovered"
-              value={String(counts.tests_discovered ?? "—")}
+              value={num(counts.tests_discovered)}
               hint="static discovery"
             />
-          </div>
-          <div className="grid-2">
+          </Stats>
+          <div className="columns">
             <Card title="Languages">
               <Languages inventory={data.snapshot.language_inventory ?? {}} />
             </Card>
             <Card title="Reference resolution">
               <Distribution values={references} />
-              <p className="muted small">
+              <p className="hint">
                 Unresolved and dynamic references are reported rather than guessed; they can hide real dependencies.
               </p>
             </Card>
           </div>
-          <div className="grid-2">
+          <div className="columns">
             <IndexingCompleteness analysisId={data.id} />
             <Card title="Dependency edges">
               <Distribution values={edges} />
@@ -172,7 +228,7 @@ function AnalysisDetail({ analysisId, onChange }: { analysisId: string; onChange
 function Languages({ inventory }: { inventory: Record<string, number> }) {
   const entries = Object.entries(inventory).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((sum, [, n]) => sum + n, 0);
-  if (!total) return <Empty>No recognised languages.</Empty>;
+  if (!total) return <Empty>No recognised source files.</Empty>;
   return (
     <ul className="bars">
       {entries.map(([language, count]) => (
@@ -190,16 +246,8 @@ function Languages({ inventory }: { inventory: Record<string, number> }) {
 
 function Distribution({ values }: { values: Record<string, number> }) {
   const entries = Object.entries(values);
-  if (!entries.length) return <Empty>None recorded.</Empty>;
-  return (
-    <ul className="chips">
-      {entries.map(([key, value]) => (
-        <li key={key}>
-          <Badge value={key} /> <strong>{value}</strong>
-        </li>
-      ))}
-    </ul>
-  );
+  if (!entries.length) return <p className="muted">None recorded.</p>;
+  return <Tally values={values} />;
 }
 
 function IndexingCompleteness({ analysisId }: { analysisId: string }) {
@@ -211,7 +259,8 @@ function IndexingCompleteness({ analysisId }: { analysisId: string }) {
       {data && <Distribution values={data.status_counts} />}
       {incomplete.data && incomplete.data.items.length > 0 && (
         <>
-          <p className="small">Files parsed with syntax errors (symbols near the errors may be missing):</p>
+          <h3>Parsed with syntax errors</h3>
+          <p className="hint">Symbols near the errors may be missing.</p>
           <ul className="plain small mono">
             {incomplete.data.items.map((f) => (
               <li key={f.id}>
@@ -227,10 +276,13 @@ function IndexingCompleteness({ analysisId }: { analysisId: string }) {
 
 function TestsCard({ analysisId, onChange }: { analysisId: string; onChange: () => void }) {
   const tests = useApi<Page<TestCase>>(`/analyses/${analysisId}/tests?limit=100`);
+  const { readOnly, sandbox } = useCapabilities();
   const [run, setRun] = useState<TestRun | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const counts: Record<string, number> = {};
   for (const t of tests.data?.items ?? []) counts[t.collection_status] = (counts[t.collection_status] ?? 0) + 1;
+  const hasTests = !!tests.data && tests.data.page.total > 0;
+  const canCollect = readOnly === false && sandbox === true;
   async function collect() {
     setError(null);
     try {
@@ -244,31 +296,44 @@ function TestsCard({ analysisId, onChange }: { analysisId: string; onChange: () 
     <Card
       title="Tests"
       actions={
-        <button className="secondary" onClick={collect} disabled={!!run}>
-          Confirm with sandboxed pytest collection
-        </button>
+        readOnly === true || sandbox === false ? undefined : (
+          <button className="secondary" onClick={collect} disabled={!!run || !canCollect}>
+            Confirm with sandboxed pytest collection
+          </button>
+        )
       }
     >
       {tests.data && tests.data.page.total === 0 && (
-        <Empty>No pytest-style tests were found (test_*.py / *_test.py with test functions).</Empty>
+        <Empty>No pytest-style tests were found (test_*.py or *_test.py files with test functions).</Empty>
       )}
-      {tests.data && tests.data.page.total > 0 && (
+      {hasTests && (
         <>
           <p>
-            Framework: <strong>pytest</strong> · {tests.data.page.total} tests discovered statically.
+            Framework: <strong>pytest</strong> · {tests.data?.page.total} tests discovered statically.
           </p>
-          <Distribution values={counts} />
-          <p className="muted small">
-            Static discovery does not run repository code. Collection runs <code className="inline-code">pytest --collect-only</code> inside the sandbox.
+          <Tally values={counts} />
+          <p className="hint">
+            Static discovery reads the files without running them.
+            {sandbox !== false && (
+              <>
+                {" "}Collection runs <code className="inline-code">pytest --collect-only</code> inside the sandbox.
+              </>
+            )}
           </p>
+          {readOnly === false && sandbox === false && (
+            <SandboxNotice>
+              Collection needs the Docker sandbox, which this instance does not have, so the static list above is
+              what you get here.
+            </SandboxNotice>
+          )}
         </>
       )}
       {run && (
         <p>
-          Collection queued: <Link href={`/test-runs/${run.id}`}>view run</Link>
+          Collection queued. <Link href={`/test-runs/${run.id}`}>Follow the run</Link>
         </p>
       )}
-      {error && <ErrorPanel error={error} />}
+      {error && <ErrorPanel error={error} title="Could not start collection" />}
     </Card>
   );
 }
@@ -281,15 +346,22 @@ function WarningsCard({ analysisId, issues }: { analysisId: string; issues: Reco
     <Card title={`Warnings (${data.page.total})`}>
       {hasIssues && (
         <>
-          <p className="small">Snapshot findings:</p>
+          <h3>Snapshot findings</h3>
           <Distribution values={issues} />
         </>
       )}
       <table className="table small">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Where</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
         <tbody>
           {data.items.map((w) => (
             <tr key={w.id}>
-              <td>
+              <td className="nowrap">
                 <Badge value={w.severity === "ERROR" ? "FAILED" : "PARTIAL"} text={w.code} />
               </td>
               <td className="mono">
@@ -303,4 +375,8 @@ function WarningsCard({ analysisId, issues }: { analysisId: string; issues: Reco
       </table>
     </Card>
   );
+}
+
+function num(value: unknown): number | string {
+  return typeof value === "number" ? value : "—";
 }

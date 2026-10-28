@@ -64,6 +64,22 @@ describe("forward", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("explains an upstream 401 on a mutation as a token problem on this side", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ error: { code: "unauthorized" } }, { status: 401 }));
+    const post = () =>
+      new Request("http://localhost:3100/api/repositories", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:3100", host: "localhost:3100" },
+        body: "{}",
+      });
+    const mismatched = await (await forward(post(), ["repositories"], config, fetchImpl)).json();
+    expect(mismatched.error.code).toBe("web_token_mismatch");
+    expect(mismatched.error.message).toContain("same value");
+    const missing = await forward(post(), ["repositories"], { ...config, apiToken: undefined }, fetchImpl);
+    expect(missing.status).toBe(401);
+    expect((await missing.json()).error.message).toContain("no REPOLENS_API_TOKEN");
+  });
+
   it("maps upstream connection failure to 502", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError("fetch failed");
@@ -87,6 +103,23 @@ describe("isSameOrigin", () => {
     const request = () => new Request("http://localhost:3100/api/x", { method: "POST", headers });
     expect(isSameOrigin(request())).toBe(false);
     expect(isSameOrigin(request(), true)).toBe(true);
+  });
+
+  it("accepts a same-origin request behind a proxy that forwards Host unchanged", () => {
+    // Vercel passes the public Host through and also sets X-Forwarded-Host to it, so the
+    // default (untrusted) check already matches Origin.
+    const headers = {
+      origin: "https://repolens.vercel.app",
+      host: "repolens.vercel.app",
+      "x-forwarded-host": "repolens.vercel.app",
+      "sec-fetch-site": "same-origin",
+    };
+    expect(isSameOrigin(new Request("https://repolens.vercel.app/api/x", { method: "POST", headers }))).toBe(true);
+  });
+
+  it("rejects a foreign Origin even when X-Forwarded-Host is spoofed to match it", () => {
+    const headers = { origin: "https://evil.example", host: "repolens.vercel.app", "x-forwarded-host": "evil.example" };
+    expect(isSameOrigin(new Request("https://repolens.vercel.app/api/x", { method: "POST", headers }))).toBe(false);
   });
 
   it("rejects requests without any origin information", () => {

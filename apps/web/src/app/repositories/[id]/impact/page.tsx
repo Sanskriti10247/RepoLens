@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Badge, Card, Empty, ErrorPanel, Loading } from "@/components/ui";
+import { Badge, Card, Empty, ErrorPanel, Loading, ReadOnlyNotice, When } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
-import { TERMINAL_CHANGE, formatTime, shortSha } from "@/lib/format";
+import { TERMINAL_CHANGE, label, shortSha } from "@/lib/format";
 import type { ChangeSet, Page, Repository } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
+import { useReadOnly } from "@/lib/useReadOnly";
 
 export default function ImpactListPage() {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +18,7 @@ export default function ImpactListPage() {
   const list = useApi<Page<ChangeSet>>(`/repositories/${id}/impact?limit=50`, {
     pollWhile: (page) => page.items.some((c) => !TERMINAL_CHANGE.has(c.status)),
   });
+  const readOnly = useReadOnly();
   const [base, setBase] = useState("");
   const [target, setTarget] = useState("HEAD");
   const [error, setError] = useState<ApiError | null>(null);
@@ -42,6 +44,10 @@ export default function ImpactListPage() {
   return (
     <>
       <Card title="Analyze a change">
+        {readOnly === true ? (
+          <ReadOnlyNotice what="analyzing new changes" />
+        ) : (
+        <>
         <form className="form-row" onSubmit={submit}>
           <label className="narrow">
             Base revision
@@ -57,45 +63,57 @@ export default function ImpactListPage() {
             Target revision
             <input required value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Target revision" />
           </label>
-          <button type="submit" disabled={busy || !base.trim() || !target.trim()}>
+          <button type="submit" disabled={busy || readOnly === null || !base.trim() || !target.trim()}>
             {busy ? "Queueing…" : "Analyze impact"}
           </button>
         </form>
-        <p className="muted small">
-          Branch names, tags or commit ids. Both revisions are analyzed first if needed, then the change is
-          mapped to symbols and propagated through the dependency graph.
+        <p className="hint">
+          Branch names, tags or commit ids. Both revisions are analyzed first if needed; the diff is then mapped
+          to symbols and followed outwards through the dependency graph.
         </p>
         {error && <ErrorPanel error={error} title="Could not start the impact analysis" />}
+        </>
+        )}
       </Card>
       <Card title="Impact analyses">
         {list.error && <ErrorPanel error={list.error} />}
         {list.loading && !list.data && <Loading />}
-        {list.data && list.data.items.length === 0 && <Empty>No impact analyses yet.</Empty>}
+        {list.data && list.data.items.length === 0 && (
+          <Empty>No changes compared yet. Pick two revisions above, for example the default branch and a feature branch.</Empty>
+        )}
         {list.data && list.data.items.length > 0 && (
           <table className="table">
             <thead>
               <tr>
                 <th>Change</th>
                 <th>Status</th>
-                <th>Files</th>
-                <th>Symbols</th>
-                <th>Created</th>
+                <th className="right hide-sm">Files</th>
+                <th className="right hide-sm">Symbols</th>
+                <th>When</th>
               </tr>
             </thead>
             <tbody>
               {list.data.items.map((c) => (
                 <tr key={c.id}>
                   <td>
-                    <Link href={`/impact/${c.id}`} className="mono">
-                      {c.base_ref} ({shortSha(c.base_sha)}) → {c.target_ref} ({shortSha(c.target_sha)})
+                    <Link href={`/impact/${c.id}`} className="row-title mono">
+                      {refName(c.base_ref)} → {refName(c.target_ref)}
                     </Link>
+                    <span className="row-sub mono">
+                      {shortSha(c.base_sha)} → {shortSha(c.target_sha)}
+                    </span>
                   </td>
                   <td>
-                    <Badge value={c.status} />
+                    <Badge
+                      value={c.status}
+                      text={TERMINAL_CHANGE.has(c.status) ? undefined : `${label(c.status)}…`}
+                    />
                   </td>
-                  <td>{String(c.summary?.changed_files ?? "—")}</td>
-                  <td>{String(c.summary?.changed_symbols ?? "—")}</td>
-                  <td>{formatTime(c.created_at)}</td>
+                  <td className="right mono hide-sm">{String(c.summary?.changed_files ?? "—")}</td>
+                  <td className="right mono hide-sm">{String(c.summary?.changed_symbols ?? "—")}</td>
+                  <td>
+                    <When iso={c.created_at} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -104,4 +122,9 @@ export default function ImpactListPage() {
       </Card>
     </>
   );
+}
+
+/** Full commit ids are unreadable in a list; branch and tag names are kept as typed. */
+function refName(ref: string): string {
+  return /^[0-9a-f]{20,}$/.test(ref) ? shortSha(ref) : ref;
 }
