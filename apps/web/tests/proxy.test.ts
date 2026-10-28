@@ -64,6 +64,22 @@ describe("forward", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("explains an upstream 401 on a mutation as a token problem on this side", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ error: { code: "unauthorized" } }, { status: 401 }));
+    const post = () =>
+      new Request("http://localhost:3100/api/repositories", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:3100", host: "localhost:3100" },
+        body: "{}",
+      });
+    const mismatched = await (await forward(post(), ["repositories"], config, fetchImpl)).json();
+    expect(mismatched.error.code).toBe("web_token_mismatch");
+    expect(mismatched.error.message).toContain("same value");
+    const missing = await forward(post(), ["repositories"], { ...config, apiToken: undefined }, fetchImpl);
+    expect(missing.status).toBe(401);
+    expect((await missing.json()).error.message).toContain("no REPOLENS_API_TOKEN");
+  });
+
   it("maps upstream connection failure to 502", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError("fetch failed");
