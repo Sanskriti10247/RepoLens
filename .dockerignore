@@ -21,6 +21,5 @@ htmlcov
 var
 docs
 tests
-progress.md
 core
 core.[0-9]*
