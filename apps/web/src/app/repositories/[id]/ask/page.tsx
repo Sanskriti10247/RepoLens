@@ -76,7 +76,7 @@ export default function AskPage() {
           runs. Naming a function, class, module or file gets the most precise answer.
         </p>
         {readOnly !== true && (
-          <ul className="examples" aria-label="Example questions">
+          <ul className="examples" aria-label="Examples to try">
             {EXAMPLES.map((example) => (
               <li key={example}>
                 <button type="button" className="link" onClick={() => setQuestion(example)}>
