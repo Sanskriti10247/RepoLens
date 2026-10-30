@@ -67,6 +67,22 @@ export interface Snapshot {
   issues_truncated: boolean;
 }
 
+/** What the worker reported last for an analysis (services/progress.py). */
+export interface AnalysisProgress {
+  /** One of ``stages``, or ``"done"`` once the results are committed. */
+  stage: string;
+  stage_index: number;
+  stage_count: number;
+  stages: string[];
+  files_done: number | null;
+  files_total: number | null;
+  current: string | null;
+  detail: string | null;
+  stage_started_at: string | null;
+  durations_ms: Record<string, number>;
+  updated_at: string;
+}
+
 export interface Analysis {
   id: string;
   repository_id: string;
@@ -87,6 +103,8 @@ export interface Analysis {
   finished_at: string | null;
   snapshot: Snapshot | null;
   job: Job | null;
+  /** Absent on APIs that predate live progress. */
+  progress?: AnalysisProgress | null;
 }
 
 export interface SymbolSummary {
@@ -196,6 +214,28 @@ export interface Stats {
   references_by_status: Record<string, number>;
   top_fan_in: { symbol: SymbolSummary; count: number }[];
   top_fan_out: { symbol: SymbolSummary; count: number }[];
+}
+
+export interface ModuleNode {
+  /** The id of the module's MODULE symbol (usable in the code explorer). */
+  id: number;
+  name: string;
+  path: string;
+}
+
+export interface ModuleEdge {
+  src_module_id: number;
+  dst_module_id: number;
+  edge_type: string;
+  edges: number;
+  references: number;
+}
+
+export interface ModuleGraph {
+  analysis_id: string;
+  modules: ModuleNode[];
+  edges: ModuleEdge[];
+  import_cycles: number[][];
 }
 
 export interface TestCase {
