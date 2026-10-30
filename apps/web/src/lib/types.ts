@@ -472,3 +472,115 @@ export interface QuestionAnswer {
   matched_symbols: string[];
   evidence: Evidence[];
 }
+
+/** ``GET /analyses/{id}/insights``: the repository health report. */
+export interface InsightComponent {
+  key: string;
+  label: string;
+  /** ``null`` when the analysis has no data for this component. */
+  score: number | null;
+  /** Share of the overall score actually given, after rescaling for dropped components. */
+  weight: number;
+  detail: string;
+}
+
+export interface InsightSymbolRef {
+  symbol_id: number;
+  qualified_name: string;
+  kind?: string;
+  file_id?: number | null;
+  path: string;
+  line: number;
+}
+
+export type FindingSeverity = "high" | "medium" | "low" | "info";
+
+export interface InsightEvidence {
+  path: string | null;
+  line: number | null;
+  symbol_id: number | null;
+  file_id?: number | null;
+  label: string;
+}
+
+export interface InsightFinding {
+  id: string;
+  severity: FindingSeverity;
+  category: string;
+  title: string;
+  detail: string;
+  evidence: InsightEvidence[];
+}
+
+export interface Insights {
+  analysis_id: string;
+  results_run_id?: string;
+  commit_sha: string;
+  score: {
+    /** Both ``null`` only when no component has data. */
+    overall: number | null;
+    grade: string | null;
+    components: InsightComponent[];
+    method: string;
+  };
+  overview: {
+    files: number;
+    source_files: number;
+    test_files: number;
+    bytes: number;
+    languages: { language: string; files: number; bytes: number }[];
+    roles: Record<string, number>;
+    modules: number;
+    symbols: number;
+    functions: number;
+    classes: number;
+    methods: number;
+  };
+  complexity: {
+    available: boolean;
+    functions?: number;
+    distribution: { bucket: string; count: number }[];
+    mean: number | null;
+    p90: number | null;
+    top: (InsightSymbolRef & { complexity: number; lines: number })[];
+  };
+  size: {
+    longest_functions: (InsightSymbolRef & { lines: number })[];
+    largest_files: { file_id: number; path: string; bytes: number; symbols: number; lines?: number }[];
+  };
+  documentation: {
+    public_symbols: number;
+    documented: number;
+    coverage: number | null;
+    undocumented: (InsightSymbolRef & { callers: number })[];
+  };
+  testing: {
+    test_files: number;
+    test_functions: number;
+    modules_with_tests: number;
+    modules_without_tests: number;
+    /** Share of source modules a test imports or references; not line coverage. */
+    coverage: number | null;
+    untested_modules: {
+      module: string;
+      symbol_id?: number | null;
+      file_id?: number | null;
+      path: string;
+      symbols: number;
+      fan_in: number;
+    }[];
+  };
+  coupling: {
+    modules: { module: string; symbol_id?: number | null; path?: string; fan_in: number; fan_out: number; instability: number | null }[];
+    cycles: string[][];
+    hubs: (InsightSymbolRef & { callers: number })[];
+  };
+  dead_code: {
+    count: number;
+    candidates: (InsightSymbolRef & { kind: string; lines: number })[];
+    note: string;
+  };
+  /** Counts per stored resolution status, plus the rate (external references excluded). */
+  references: Record<string, number | null> & { resolution_rate?: number | null };
+  findings: InsightFinding[];
+}
