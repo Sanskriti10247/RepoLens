@@ -77,3 +77,9 @@ curl -s -H "$H" -H 'content-type: application/json' \
 | questions | `POST /repositories/{id}/questions` |
 
 All paths are under `/api`.
+
+`GET /analyses/{id}` includes `progress`, the worker's latest report for the run: `stage`
+(one of `stages`, or `done`), `stage_index`, `stage_count`, `files_done` and `files_total`
+where the stage works through files, `current` (the file being read), `detail`,
+`stage_started_at`, `durations_ms` for the stages finished so far, and `updated_at`. It is
+`null` until a worker starts the run, and the last report stays after the run ends.

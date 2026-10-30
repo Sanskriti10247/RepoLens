@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from repolens.persistence.models import AnalysisRun
 from repolens.services.jobs import JobContext
+from repolens.services.progress import NULL_PROGRESS, ProgressSink
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,7 @@ class SnapshotAnalyzer(Protocol):
         files: list[SnapshotFile],
         read_blob: Any,
         ctx: JobContext,
+        progress: ProgressSink = NULL_PROGRESS,
     ) -> dict[str, Any]:
         """Persist results for ``run`` and return counts. Must be deterministic."""
         ...
@@ -50,5 +52,6 @@ class NoAnalyzer:
         files: list[SnapshotFile],
         read_blob: Any,
         ctx: JobContext,
+        progress: ProgressSink = NULL_PROGRESS,
     ) -> dict[str, Any]:
         return {}

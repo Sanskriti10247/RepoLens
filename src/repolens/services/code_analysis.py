@@ -22,6 +22,7 @@ from repolens.persistence import analysis_writer as writer
 from repolens.persistence.models import AnalysisRun, ParseCacheEntry
 from repolens.repository.git import GitError
 from repolens.services.jobs import JobContext
+from repolens.services.progress import NULL_PROGRESS, ProgressSink
 from repolens.services.snapshots import SnapshotFile
 
 RESOLVER_REVISION = "1"
@@ -58,6 +59,7 @@ class PythonSnapshotAnalyzer:
         files: list[SnapshotFile],
         read_blob: ReadBlob,
         ctx: JobContext,
+        progress: ProgressSink = NULL_PROGRESS,
     ) -> dict[str, Any]:
         timings: dict[str, float] = {}
         started = time.perf_counter()
@@ -72,6 +74,7 @@ class PythonSnapshotAnalyzer:
         for index, file in enumerate(files):
             if index % 50 == 0:
                 ctx.checkpoint()
+            progress.advance(index, current=file.path)
             outcome, parsed = self._analyze_file(
                 file, modules, shadowed, read_blob, warnings, cache
             )
@@ -81,19 +84,27 @@ class PythonSnapshotAnalyzer:
         timings["parse_ms"] = _ms(started)
 
         ctx.checkpoint()
+        progress.stage(
+            "resolve",
+            detail=f"{len(parsed_files)} parsed files, {len(modules)} module names",
+        )
         started = time.perf_counter()
         resolution = resolve_files(parsed_files, modules)
         timings["resolve_ms"] = _ms(started)
 
         started = time.perf_counter()
         symbol_pairs = [(file_ids[p.path], symbol) for p in parsed_files for symbol in p.symbols]
+        progress.stage("persist", detail=f"writing {len(symbol_pairs)} symbols")
         step = time.perf_counter()
         symbol_ids = writer.write_symbols(session, run.id, symbol_pairs)
         timings["persist_symbols_ms"], step = _ms(step), time.perf_counter()
+        progress.advance(detail="writing references")
         reference_ids = writer.write_references(session, run.id, file_ids, symbol_ids, resolution)
         timings["persist_references_ms"], step = _ms(step), time.perf_counter()
+        progress.advance(detail="writing dependency edges")
         edge_counts = writer.write_edges(session, run.id, symbol_ids, resolution, reference_ids)
         timings["persist_edges_ms"], step = _ms(step), time.perf_counter()
+        progress.advance(detail="writing file outcomes and warnings")
         writer.write_file_outcomes(session, run.id, outcomes)
         writer.write_warnings(session, run.id, warnings)
         timings["persist_files_warnings_ms"] = _ms(step)

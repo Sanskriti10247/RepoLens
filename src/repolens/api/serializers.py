@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from repolens.api.schemas import AnalysisOut, AnalysisSummary, JobOut, SnapshotOut
+from typing import Any
+
+from pydantic import ValidationError
+
+from repolens.api.schemas import (
+    AnalysisOut,
+    AnalysisProgressOut,
+    AnalysisSummary,
+    JobOut,
+    SnapshotOut,
+)
 from repolens.persistence.models import AnalysisRun
 from repolens.services.analysis_views import AnalysisView
 
@@ -26,5 +36,17 @@ def analysis_out(view: AnalysisView) -> AnalysisOut:
             "results_run_id": view.results_run_id,
             "snapshot": snapshot,
             "job": JobOut.model_validate(view.job) if view.job else None,
+            "progress": _progress(view.progress),
         }
     )
+
+
+def _progress(document: dict[str, Any] | None) -> AnalysisProgressOut | None:
+    # A report is informational: one written by another engine version that no longer
+    # matches the schema is left out rather than failing the whole response.
+    if not document:
+        return None
+    try:
+        return AnalysisProgressOut.model_validate(document)
+    except ValidationError:
+        return None

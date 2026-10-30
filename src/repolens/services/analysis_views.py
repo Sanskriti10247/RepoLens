@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from repolens.persistence.models import AnalysisRun, Job, RepositorySnapshot
+from repolens.persistence.models import AnalysisProgress, AnalysisRun, Job, RepositorySnapshot
 from repolens.services.analysis import effective_run_id
 from repolens.services.errors import NotFound
 from repolens.services.repositories import Page
@@ -21,6 +22,8 @@ class AnalysisView:
     results_run_id: uuid.UUID
     snapshot: RepositorySnapshot | None
     job: Job | None
+    # Latest worker progress report (services/progress.py); None before the worker starts.
+    progress: dict[str, Any] | None = None
 
 
 def get_analysis(session: Session, run_id: uuid.UUID) -> AnalysisView:
@@ -31,7 +34,10 @@ def get_analysis(session: Session, run_id: uuid.UUID) -> AnalysisView:
     job = session.execute(
         select(Job).where(Job.subject_id == run.id).order_by(Job.created_at.desc()).limit(1)
     ).scalar_one_or_none()
-    return AnalysisView(run, effective_run_id(session, run.id), snapshot, job)
+    progress = session.execute(
+        select(AnalysisProgress.progress).where(AnalysisProgress.analysis_run_id == run.id)
+    ).scalar_one_or_none()
+    return AnalysisView(run, effective_run_id(session, run.id), snapshot, job, progress)
 
 
 def list_analyses(

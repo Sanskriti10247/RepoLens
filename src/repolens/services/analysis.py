@@ -10,6 +10,9 @@ Execution (worker process), each step committed separately so progress is observ
 3. reuse or create the immutable snapshot (inventory written atomically with it);
 4. reuse an equivalent completed analysis if one exists;
 5. run the analyzer and persist its output together with the final status.
+
+Throughout, a ``ProgressReporter`` records the current stage, files done and the file being
+read in ``analysis_progress`` (see services/progress.py) for the web app's process view.
 """
 
 from __future__ import annotations
@@ -60,6 +63,7 @@ from repolens.repository.providers import (
 from repolens.repository.validation import ValidationError, validate_ref
 from repolens.services.errors import Conflict, InvalidInput, NotFound
 from repolens.services.jobs import JobContext, PermanentJobError, RetryableJobError
+from repolens.services.progress import NULL_PROGRESS, ProgressReporter, ProgressSink
 from repolens.services.repositories import get_repository
 from repolens.services.snapshots import SnapshotAnalyzer, SnapshotFile
 from repolens.services.test_planning import ensure_test_catalog
@@ -293,14 +297,19 @@ class AnalyzeRepositoryHandler:
                 repo.canonical_url,
             )
 
+        progress = ProgressReporter(factory, run_id)
+        progress.stage("fetch", current=canonical, detail=f"ref {ref}")
         with _timed(timings, "fetch_ms"):
             mirror, default_branch = self.pipeline.prepare_mirror(
                 ctx, repo_id, provider_name, canonical
             )
             resolved = self.pipeline.resolve(mirror, ref, default_branch)
         ctx.checkpoint()
+        progress.stage("snapshot", current=resolved.commit_sha)
         with _timed(timings, "snapshot_ms"):
-            snapshot_id = self.pipeline.ensure_snapshot(ctx, repo_id, mirror, resolved)
+            snapshot_id = self.pipeline.ensure_snapshot(
+                ctx, repo_id, mirror, resolved, progress=progress
+            )
 
         with transaction(factory) as session:
             run = session.get(AnalysisRun, run_id, with_for_update=True)
@@ -317,7 +326,9 @@ class AnalyzeRepositoryHandler:
             reusable = _find_reusable_run(session, run)
             if reusable is not None:
                 _mark_reused(run, reusable)
-                return {"reused_run_id": str(reusable), "commit_sha": resolved.commit_sha}
+        if reusable is not None:
+            progress.finish(detail="results reused from an identical analysis of this commit")
+            return {"reused_run_id": str(reusable), "commit_sha": resolved.commit_sha}
 
         ctx.checkpoint()
         return self.pipeline.analyze_run(
@@ -327,6 +338,7 @@ class AnalyzeRepositoryHandler:
             mirror=mirror,
             resolved=resolved,
             timings=timings,
+            progress=progress,
         )
 
 
@@ -391,12 +403,19 @@ class AnalysisPipeline:
             raise PermanentJobError(str(exc), category="revision_not_resolved") from exc
 
     def ensure_snapshot(
-        self, ctx: JobContext, repo_id: uuid.UUID, mirror: Path, resolved: ResolvedRevision
+        self,
+        ctx: JobContext,
+        repo_id: uuid.UUID,
+        mirror: Path,
+        resolved: ResolvedRevision,
+        *,
+        progress: ProgressSink = NULL_PROGRESS,
     ) -> uuid.UUID:
         factory = ctx.session_factory
         with transaction(factory) as session:
             existing = _snapshot_id(session, repo_id, resolved.commit_sha)
         if existing is not None:
+            progress.advance(detail="snapshot already recorded")
             return existing
 
         settings = self.deps.settings
@@ -409,6 +428,7 @@ class AnalysisPipeline:
                 max_files=settings.max_file_count,
                 max_hash_bytes=settings.max_hashed_file_bytes,
                 checkpoint=ctx.checkpoint,
+                on_file=lambda done, total, path: progress.advance(done, total=total, current=path),
             )
         except InventoryTooLarge as exc:
             raise PermanentJobError(str(exc), category="repository_too_large") from exc
@@ -477,18 +497,29 @@ class AnalysisPipeline:
         mirror: Path,
         resolved: ResolvedRevision,
         timings: dict[str, float],
+        progress: ProgressSink = NULL_PROGRESS,
     ) -> dict[str, Any]:
         factory = ctx.session_factory
         with transaction(factory) as session:
             files = load_snapshot_files(session, snapshot_id)
+        # Written before the run row is locked below, so the progress row exists from here on.
+        progress.stage("parse", total=len(files))
         try:
             with self.deps.runner.blob_reader(mirror) as reader, transaction(factory) as session:
                 run = session.get(AnalysisRun, run_id, with_for_update=True)
                 assert run is not None  # noqa: S101
                 started = time.perf_counter()
-                counts = self.deps.analyzer.analyze(session, run, files, reader.read, ctx)
+                counts = self.deps.analyzer.analyze(
+                    session, run, files, reader.read, ctx, progress=progress
+                )
                 session.flush()
+                progress.stage("tests")
+                tests_started = time.perf_counter()
                 tests = ensure_test_catalog(session, run.id)
+                if isinstance(counts.get("analysis_timings_ms"), dict):
+                    counts["analysis_timings_ms"]["tests_ms"] = round(
+                        (time.perf_counter() - tests_started) * 1000, 1
+                    )
                 timings["analyze_ms"] = round((time.perf_counter() - started) * 1000, 1)
                 ctx.checkpoint()
                 counts = {"files": len(files), **counts, "tests_discovered": len(tests)}
@@ -510,7 +541,9 @@ class AnalysisPipeline:
                 if reusable is None:
                     raise
                 _mark_reused(run, reusable)
-                return {"reused_run_id": str(reusable), "commit_sha": resolved.commit_sha}
+            progress.finish(detail="results reused from an identical analysis of this commit")
+            return {"reused_run_id": str(reusable), "commit_sha": resolved.commit_sha}
+        progress.finish()
         return {"commit_sha": resolved.commit_sha, "counts": counts, "timings_ms": timings}
 
     def ensure_analysis(
@@ -562,6 +595,7 @@ class AnalysisPipeline:
             mirror=mirror,
             resolved=resolved,
             timings={},
+            progress=ProgressReporter(ctx.session_factory, run_id),
         )
         reused = result.get("reused_run_id")
         return uuid.UUID(reused) if reused else run_id

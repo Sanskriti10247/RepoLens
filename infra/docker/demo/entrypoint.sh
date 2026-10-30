@@ -47,9 +47,13 @@ CONF
   --exit-on-error "$HOME_DIR/restore/db.dump"
 "$PGBIN/psql" -h 127.0.0.1 -p "$PG_PORT" -U repolens -d repolens -qc "ANALYZE" >/dev/null
 rm -rf "$HOME_DIR/restore"
-echo "{\"event\": \"demo_database_ready\", \"seconds\": $((SECONDS - started))}"
 
 export REPOLENS_DATABASE_URL="postgresql+psycopg://repolens@127.0.0.1:$PG_PORT/repolens"
+# The snapshot may predate the newest migrations; bring its schema up to date (additive
+# migrations only, so this takes a moment even on a tenth of a CPU).
+(cd /app && alembic upgrade head >/dev/null)
+echo "{\"event\": \"demo_database_ready\", \"seconds\": $((SECONDS - started))}"
+
 export REPOLENS_DATA_DIR="$HOME_DIR/data"
 export REPOLENS_API_PORT="${PORT:-8000}"
 

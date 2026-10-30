@@ -194,6 +194,26 @@ class AnalysisRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class AnalysisProgress(Base):
+    """The latest progress snapshot of a running analysis, one row per run.
+
+    Kept out of ``analysis_runs`` on purpose: the analysis transaction holds the run row
+    ``FOR UPDATE`` for its whole duration, so progress written from a separate short
+    transaction would wait on that lock. The row is created before the lock is taken and only
+    ``progress`` is updated afterwards, which does not touch the referenced run row.
+    """
+
+    __tablename__ = "analysis_progress"
+
+    analysis_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    progress: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class AnalysisFile(Base):
     __tablename__ = "analysis_files"
     __table_args__ = (enum_check("status", FileAnalysisStatus),)
