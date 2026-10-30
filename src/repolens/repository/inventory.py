@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ LANGUAGES: dict[str, str] = {
     ".pyi": "python",
     ".ts": "typescript",
     ".tsx": "typescript",
+    ".mts": "typescript",
+    ".cts": "typescript",
     ".js": "javascript",
     ".jsx": "javascript",
     ".mjs": "javascript",
@@ -30,11 +33,26 @@ LANGUAGES: dict[str, str] = {
     ".go": "go",
     ".rs": "rust",
     ".java": "java",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".scala": "scala",
+    ".swift": "swift",
+    ".cs": "csharp",
+    ".php": "php",
     ".c": "c",
     ".h": "c",
     ".cpp": "cpp",
+    ".cc": "cpp",
+    ".hpp": "cpp",
     ".rb": "ruby",
+    ".lua": "lua",
+    ".dart": "dart",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".vue": "vue",
+    ".svelte": "svelte",
     ".sh": "shell",
+    ".bash": "shell",
     ".md": "markdown",
     ".rst": "restructuredtext",
     ".toml": "toml",
@@ -45,6 +63,8 @@ LANGUAGES: dict[str, str] = {
     ".cfg": "ini",
     ".html": "html",
     ".css": "css",
+    ".scss": "scss",
+    ".xml": "xml",
     ".sql": "sql",
 }
 _CONFIG_NAMES = {
@@ -67,6 +87,12 @@ _CONFIG_NAMES = {
 }
 _CONFIG_SUFFIXES = {".toml", ".ini", ".cfg", ".yaml", ".yml", ".json", ".lock"}
 _DOC_SUFFIXES = {".md", ".rst", ".txt"}
+_CODE_LANGUAGES = frozenset(
+    {"javascript", "typescript", "go", "java", "rust", "kotlin", "scala", "csharp", "ruby", "php"}
+)
+_TEST_DIRS = {"tests", "test", "testing", "__tests__", "spec"}
+# Test file names of other languages: a.test.ts, a.spec.js, a_test.go, ATest.java, FooTests.java.
+_TEST_NAME = re.compile(r"(\.(test|spec)\.[cm]?[jt]sx?|_test\.go|[a-z0-9]Tests?\.java)$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +105,7 @@ class InventoryEntry:
     role: FileRole
     is_binary: bool
     content_sha256: str | None
+    line_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +153,8 @@ def classify_role(path: str) -> FileRole:
         or name == "conftest.py"
         or parts & {"tests", "test", "testing"}
     ):
+        return FileRole.TEST
+    if detect_language(path) in _CODE_LANGUAGES and (_TEST_NAME.search(name) or parts & _TEST_DIRS):
         return FileRole.TEST
     if name in _CONFIG_NAMES or pure.suffix.lower() in _CONFIG_SUFFIXES:
         return FileRole.CONFIG
@@ -223,6 +252,7 @@ def _describe(
     path, mode, object_id, size = item
     regular = mode in (FileMode.REGULAR, FileMode.EXECUTABLE)
     content_sha256: str | None = None
+    line_count: int | None = None
     is_binary = False
     if regular and size <= max_hash_bytes:
         try:
@@ -232,6 +262,8 @@ def _describe(
         if data is not None:
             content_sha256 = hashlib.sha256(data).hexdigest()
             is_binary = b"\0" in data[:8000]
+            if not is_binary:
+                line_count = data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
     elif regular:
         message = f"File larger than {max_hash_bytes} bytes was not hashed"
         issues.append(InventoryIssue("FILE_NOT_HASHED", Severity.INFO, message, path))
@@ -243,8 +275,10 @@ def _describe(
         mode=mode,
         blob_sha=object_id,
         size_bytes=size,
-        language=detect_language(path) if regular and not is_binary else None,
+        # Text files of unknown type still count, as "text", so every repository has a profile.
+        language=(detect_language(path) or "text") if regular and not is_binary else None,
         role=classify_role(path) if regular else FileRole.OTHER,
         is_binary=is_binary,
         content_sha256=content_sha256,
+        line_count=line_count,
     )

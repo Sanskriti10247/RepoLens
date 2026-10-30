@@ -263,6 +263,9 @@ def test_path_problem(path: str, ok: bool) -> None:
         ("docs/index.md", FileRole.DOC),
         ("LICENSE", FileRole.OTHER),
         ("web/app.ts", FileRole.SOURCE),
+        ("web/app.test.ts", FileRole.TEST),
+        ("pkg/server_test.go", FileRole.TEST),
+        ("test/fixtures/data.json", FileRole.CONFIG),
     ],
 )
 def test_classify_role(path: str, role: FileRole) -> None:
