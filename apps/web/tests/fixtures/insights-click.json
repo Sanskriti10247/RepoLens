@@ -1,0 +1,1117 @@
+{
+ "analysis_id": "6ba3d1d9-ebbf-4594-ada0-e1bca9602ed5",
+ "results_run_id": "6ba3d1d9-ebbf-4594-ada0-e1bca9602ed5",
+ "commit_sha": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+ "score": {
+  "overall": 71,
+  "grade": "C",
+  "components": [
+   {
+    "key": "complexity",
+    "label": "Complexity",
+    "score": 80,
+    "weight": 0.25,
+    "detail": "29 of 675 functions above complexity 10 (5 above 20)"
+   },
+   {
+    "key": "documentation",
+    "label": "Documentation",
+    "score": 62,
+    "weight": 0.15,
+    "detail": "254 of 412 public classes, functions and methods have a docstring"
+   },
+   {
+    "key": "testing",
+    "label": "Tests",
+    "score": 59,
+    "weight": 0.25,
+    "detail": "17 of 29 modules are imported or referenced by test code"
+   },
+   {
+    "key": "structure",
+    "label": "Structure",
+    "score": 88,
+    "weight": 0.2,
+    "detail": "2 of 32 modules in import cycles; 0 depend on more than 15 other modules"
+   },
+   {
+    "key": "resolution",
+    "label": "Resolvable references",
+    "score": 64,
+    "weight": 0.15,
+    "detail": "4038 of 6301 references resolved to a single definition (references to the standard library and third-party packages are excluded)"
+   }
+  ],
+  "method": "Weighted mean of component scores; see docs/insights.md"
+ },
+ "overview": {
+  "files": 178,
+  "source_files": 32,
+  "test_files": 59,
+  "bytes": 1687127,
+  "languages": [
+   {
+    "language": "python",
+    "files": 91,
+    "bytes": 1003633
+   },
+   {
+    "language": "markdown",
+    "files": 42,
+    "bytes": 299838
+   },
+   {
+    "language": "yaml",
+    "files": 9,
+    "bytes": 11096
+   },
+   {
+    "language": "toml",
+    "files": 11,
+    "bytes": 8547
+   },
+   {
+    "language": "json",
+    "files": 1,
+    "bytes": 434
+   },
+   {
+    "language": "shell",
+    "files": 1,
+    "bytes": 165
+   },
+   {
+    "language": "ini",
+    "files": 1,
+    "bytes": 20
+   }
+  ],
+  "roles": {
+   "config": 23,
+   "docs": 47,
+   "other": 17,
+   "source": 32,
+   "test": 59
+  },
+  "modules": 91,
+  "symbols": 2169,
+  "functions": 1408,
+  "classes": 181,
+  "methods": 489
+ },
+ "complexity": {
+  "available": true,
+  "functions": 675,
+  "distribution": [
+   {
+    "bucket": "1-5",
+    "count": 581
+   },
+   {
+    "bucket": "6-10",
+    "count": 65
+   },
+   {
+    "bucket": "11-20",
+    "count": 24
+   },
+   {
+    "bucket": "21+",
+    "count": 5
+   }
+  ],
+  "mean": 3.11,
+  "p90": 7,
+  "top": [
+   {
+    "symbol_id": 404,
+    "qualified_name": "click.core.Option.get_help_extra",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 3614,
+    "complexity": 35,
+    "lines": 83
+   },
+   {
+    "symbol_id": 213,
+    "qualified_name": "click._textwrap.TextWrapper._wrap_chunks",
+    "kind": "METHOD",
+    "file_id": 104,
+    "path": "src/click/_textwrap.py",
+    "line": 66,
+    "complexity": 31,
+    "lines": 97
+   },
+   {
+    "symbol_id": 261,
+    "qualified_name": "click.core.Context.__init__",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 370,
+    "complexity": 28,
+    "lines": 175
+   },
+   {
+    "symbol_id": 604,
+    "qualified_name": "click.termui.style",
+    "kind": "FUNCTION",
+    "file_id": 115,
+    "path": "src/click/termui.py",
+    "line": 641,
+    "complexity": 21,
+    "lines": 125
+   },
+   {
+    "symbol_id": 141,
+    "qualified_name": "click._compat.open_stream",
+    "kind": "FUNCTION",
+    "file_id": 102,
+    "path": "src/click/_compat.py",
+    "line": 374,
+    "complexity": 21,
+    "lines": 79
+   },
+   {
+    "symbol_id": 660,
+    "qualified_name": "click.testing.CliRunner.invoke",
+    "kind": "METHOD",
+    "file_id": 116,
+    "path": "src/click/testing.py",
+    "line": 596,
+    "complexity": 19,
+    "lines": 144
+   },
+   {
+    "symbol_id": 317,
+    "qualified_name": "click.core.Command.main",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 1515,
+    "complexity": 19,
+    "lines": 135
+   },
+   {
+    "symbol_id": 202,
+    "qualified_name": "click._termui_impl.open_url",
+    "kind": "FUNCTION",
+    "file_id": 103,
+    "path": "src/click/_termui_impl.py",
+    "line": 799,
+    "complexity": 19,
+    "lines": 68
+   },
+   {
+    "symbol_id": 751,
+    "qualified_name": "click.types.Path.convert",
+    "kind": "METHOD",
+    "file_id": 117,
+    "path": "src/click/types.py",
+    "line": 1161,
+    "complexity": 18,
+    "lines": 73
+   },
+   {
+    "symbol_id": 399,
+    "qualified_name": "click.core.Option._parse_decls",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 3449,
+    "complexity": 18,
+    "lines": 66
+   }
+  ]
+ },
+ "size": {
+  "longest_functions": [
+   {
+    "symbol_id": 654,
+    "qualified_name": "click.testing.CliRunner.isolation",
+    "kind": "METHOD",
+    "file_id": 116,
+    "path": "src/click/testing.py",
+    "line": 398,
+    "lines": 197
+   },
+   {
+    "symbol_id": 261,
+    "qualified_name": "click.core.Context.__init__",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 370,
+    "lines": 175
+   },
+   {
+    "symbol_id": 601,
+    "qualified_name": "click.termui.progressbar",
+    "kind": "FUNCTION",
+    "file_id": 115,
+    "path": "src/click/termui.py",
+    "line": 443,
+    "lines": 157
+   },
+   {
+    "symbol_id": 660,
+    "qualified_name": "click.testing.CliRunner.invoke",
+    "kind": "METHOD",
+    "file_id": 116,
+    "path": "src/click/testing.py",
+    "line": 596,
+    "lines": 144
+   },
+   {
+    "symbol_id": 451,
+    "qualified_name": "click.decorators.version_option",
+    "kind": "FUNCTION",
+    "file_id": 108,
+    "path": "src/click/decorators.py",
+    "line": 421,
+    "lines": 138
+   },
+   {
+    "symbol_id": 317,
+    "qualified_name": "click.core.Command.main",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 1515,
+    "lines": 135
+   },
+   {
+    "symbol_id": 604,
+    "qualified_name": "click.termui.style",
+    "kind": "FUNCTION",
+    "file_id": 115,
+    "path": "src/click/termui.py",
+    "line": 641,
+    "lines": 125
+   },
+   {
+    "symbol_id": 594,
+    "qualified_name": "click.termui.prompt",
+    "kind": "FUNCTION",
+    "file_id": 115,
+    "path": "src/click/termui.py",
+    "line": 168,
+    "lines": 119
+   },
+   {
+    "symbol_id": 213,
+    "qualified_name": "click._textwrap.TextWrapper._wrap_chunks",
+    "kind": "METHOD",
+    "file_id": 104,
+    "path": "src/click/_textwrap.py",
+    "line": 66,
+    "lines": 97
+   },
+   {
+    "symbol_id": 789,
+    "qualified_name": "click.utils.echo",
+    "kind": "FUNCTION",
+    "file_id": 118,
+    "path": "src/click/utils.py",
+    "line": 240,
+    "lines": 95
+   }
+  ],
+  "largest_files": [
+   {
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "bytes": 157018,
+    "symbols": 172,
+    "lines": 4038
+   },
+   {
+    "file_id": 137,
+    "path": "tests/test_options.py",
+    "bytes": 134294,
+    "symbols": 250,
+    "lines": 3945
+   },
+   {
+    "file_id": 141,
+    "path": "tests/test_termui.py",
+    "bytes": 69687,
+    "symbols": 138,
+    "lines": 1984
+   },
+   {
+    "file_id": 117,
+    "path": "src/click/types.py",
+    "bytes": 47335,
+    "symbols": 103,
+    "lines": 1437
+   },
+   {
+    "file_id": 121,
+    "path": "tests/test_arguments.py",
+    "bytes": 38961,
+    "symbols": 116,
+    "lines": 1229
+   },
+   {
+    "file_id": 115,
+    "path": "src/click/termui.py",
+    "bytes": 35883,
+    "symbols": 28,
+    "lines": 1024
+   },
+   {
+    "file_id": 103,
+    "path": "src/click/_termui_impl.py",
+    "bytes": 32805,
+    "symbols": 48,
+    "lines": 972
+   },
+   {
+    "file_id": 122,
+    "path": "tests/test_basic.py",
+    "bytes": 28629,
+    "symbols": 102,
+    "lines": 986
+   },
+   {
+    "file_id": 116,
+    "path": "src/click/testing.py",
+    "bytes": 27584,
+    "symbols": 46,
+    "lines": 798
+   },
+   {
+    "file_id": 114,
+    "path": "src/click/shell_completion.py",
+    "bytes": 26172,
+    "symbols": 40,
+    "lines": 801
+   }
+  ]
+ },
+ "documentation": {
+  "public_symbols": 412,
+  "documented": 254,
+  "coverage": 0.6165,
+  "undocumented": [
+   {
+    "symbol_id": 298,
+    "qualified_name": "click.core.Command.get_params",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 1132,
+    "callers": 7
+   },
+   {
+    "symbol_id": 52,
+    "qualified_name": "imagepipe.copy_filename",
+    "kind": "FUNCTION",
+    "file_id": 83,
+    "path": "examples/imagepipe/imagepipe.py",
+    "line": 69,
+    "callers": 6
+   },
+   {
+    "symbol_id": 354,
+    "qualified_name": "click.core.CommandCollection.list_commands",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 2222,
+    "callers": 4
+   },
+   {
+    "symbol_id": 347,
+    "qualified_name": "click.core.Group.resolve_command",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 2120,
+    "callers": 4
+   },
+   {
+    "symbol_id": 36,
+    "qualified_name": "complex.cli.ComplexCLI.list_commands",
+    "kind": "METHOD",
+    "file_id": 74,
+    "path": "examples/complex/complex/cli.py",
+    "line": 32,
+    "callers": 4
+   },
+   {
+    "symbol_id": 9,
+    "qualified_name": "aliases.AliasedGroup.get_command",
+    "kind": "METHOD",
+    "file_id": 64,
+    "path": "examples/aliases/aliases.py",
+    "line": 42,
+    "callers": 3
+   },
+   {
+    "symbol_id": 413,
+    "qualified_name": "click.core.Argument.make_metavar",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 3944,
+    "callers": 3
+   },
+   {
+    "symbol_id": 353,
+    "qualified_name": "click.core.CommandCollection.get_command",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 2205,
+    "callers": 3
+   },
+   {
+    "symbol_id": 409,
+    "qualified_name": "click.core.Option.process_value",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 3876,
+    "callers": 3
+   },
+   {
+    "symbol_id": 470,
+    "qualified_name": "click.exceptions.BadParameter.format_message",
+    "kind": "METHOD",
+    "file_id": 109,
+    "path": "src/click/exceptions.py",
+    "line": 146,
+    "callers": 3
+   }
+  ]
+ },
+ "testing": {
+  "test_files": 59,
+  "test_functions": 606,
+  "modules_with_tests": 17,
+  "modules_without_tests": 12,
+  "coverage": 0.5862,
+  "untested_modules": [
+   {
+    "module": "click._winconsole",
+    "symbol_id": 222,
+    "file_id": 106,
+    "path": "src/click/_winconsole.py",
+    "symbols": 25,
+    "fan_in": 1
+   },
+   {
+    "module": "aliases",
+    "symbol_id": 2,
+    "file_id": 64,
+    "path": "examples/aliases/aliases.py",
+    "symbols": 16,
+    "fan_in": 1
+   },
+   {
+    "module": "imagepipe",
+    "symbol_id": 44,
+    "file_id": 83,
+    "path": "examples/imagepipe/imagepipe.py",
+    "symbols": 21,
+    "fan_in": 0
+   },
+   {
+    "module": "termui",
+    "symbol_id": 88,
+    "file_id": 96,
+    "path": "examples/termui/termui.py",
+    "symbols": 13,
+    "fan_in": 0
+   },
+   {
+    "module": "repo",
+    "symbol_id": 77,
+    "file_id": 93,
+    "path": "examples/repo/repo.py",
+    "symbols": 10,
+    "fan_in": 0
+   },
+   {
+    "module": "naval",
+    "symbol_id": 68,
+    "file_id": 89,
+    "path": "examples/naval/naval.py",
+    "symbols": 8,
+    "fan_in": 0
+   },
+   {
+    "module": "completion",
+    "symbol_id": 21,
+    "file_id": 70,
+    "path": "examples/completion/completion.py",
+    "symbols": 7,
+    "fan_in": 0
+   },
+   {
+    "module": "validation",
+    "symbol_id": 102,
+    "file_id": 99,
+    "path": "examples/validation/validation.py",
+    "symbols": 4,
+    "fan_in": 0
+   },
+   {
+    "module": "colors",
+    "symbol_id": 19,
+    "file_id": 67,
+    "path": "examples/colors/colors.py",
+    "symbols": 1,
+    "fan_in": 0
+   },
+   {
+    "module": "complex.commands.cmd_init",
+    "symbol_id": 40,
+    "file_id": 76,
+    "path": "examples/complex/complex/commands/cmd_init.py",
+    "symbols": 1,
+    "fan_in": 0
+   }
+  ]
+ },
+ "coupling": {
+  "modules": [
+   {
+    "module": "click.utils",
+    "symbol_id": 766,
+    "path": "src/click/utils.py",
+    "fan_in": 19,
+    "fan_out": 3,
+    "instability": 0.1364
+   },
+   {
+    "module": "click.decorators",
+    "symbol_id": 421,
+    "path": "src/click/decorators.py",
+    "fan_in": 14,
+    "fan_out": 3,
+    "instability": 0.1765
+   },
+   {
+    "module": "click",
+    "symbol_id": 107,
+    "path": "src/click/__init__.py",
+    "fan_in": 12,
+    "fan_out": 9,
+    "instability": 0.4286
+   },
+   {
+    "module": "click.types",
+    "symbol_id": 662,
+    "path": "src/click/types.py",
+    "fan_in": 11,
+    "fan_out": 5,
+    "instability": 0.3125
+   },
+   {
+    "module": "click.core",
+    "symbol_id": 248,
+    "path": "src/click/core.py",
+    "fan_in": 10,
+    "fan_out": 11,
+    "instability": 0.5238
+   },
+   {
+    "module": "click.exceptions",
+    "symbol_id": 457,
+    "path": "src/click/exceptions.py",
+    "fan_in": 9,
+    "fan_out": 4,
+    "instability": 0.3077
+   },
+   {
+    "module": "click._compat",
+    "symbol_id": 109,
+    "path": "src/click/_compat.py",
+    "fan_in": 9,
+    "fan_out": 1,
+    "instability": 0.1
+   },
+   {
+    "module": "click.termui",
+    "symbol_id": 586,
+    "path": "src/click/termui.py",
+    "fan_in": 6,
+    "fan_out": 6,
+    "instability": 0.5
+   },
+   {
+    "module": "click.globals",
+    "symbol_id": 512,
+    "path": "src/click/globals.py",
+    "fan_in": 6,
+    "fan_out": 1,
+    "instability": 0.1429
+   },
+   {
+    "module": "click.shell_completion",
+    "symbol_id": 545,
+    "path": "src/click/shell_completion.py",
+    "fan_in": 4,
+    "fan_out": 2,
+    "instability": 0.3333
+   }
+  ],
+  "cycles": [
+   [
+    "click._compat",
+    "click._winconsole"
+   ]
+  ],
+  "hubs": [
+   {
+    "symbol_id": 789,
+    "qualified_name": "click.utils.echo",
+    "kind": "FUNCTION",
+    "file_id": 118,
+    "path": "src/click/utils.py",
+    "line": 240,
+    "callers": 342
+   },
+   {
+    "symbol_id": 294,
+    "qualified_name": "click.core.Command.__init__",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 1065,
+    "callers": 84
+   },
+   {
+    "symbol_id": 293,
+    "qualified_name": "click.core.Command",
+    "kind": "CLASS",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 989,
+    "callers": 81
+   },
+   {
+    "symbol_id": 388,
+    "qualified_name": "click.core.Option.__init__",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 3149,
+    "callers": 74
+   },
+   {
+    "symbol_id": 387,
+    "qualified_name": "click.core.Option",
+    "kind": "CLASS",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 3057,
+    "callers": 72
+   },
+   {
+    "symbol_id": 650,
+    "qualified_name": "click.testing.CliRunner",
+    "kind": "CLASS",
+    "file_id": 116,
+    "path": "src/click/testing.py",
+    "line": 317,
+    "callers": 56
+   },
+   {
+    "symbol_id": 651,
+    "qualified_name": "click.testing.CliRunner.__init__",
+    "kind": "METHOD",
+    "file_id": 116,
+    "path": "src/click/testing.py",
+    "line": 360,
+    "callers": 56
+   },
+   {
+    "symbol_id": 261,
+    "qualified_name": "click.core.Context.__init__",
+    "kind": "METHOD",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 370,
+    "callers": 42
+   },
+   {
+    "symbol_id": 260,
+    "qualified_name": "click.core.Context",
+    "kind": "CLASS",
+    "file_id": 107,
+    "path": "src/click/core.py",
+    "line": 238,
+    "callers": 41
+   },
+   {
+    "symbol_id": 692,
+    "qualified_name": "click.types.Choice",
+    "kind": "CLASS",
+    "file_id": 117,
+    "path": "src/click/types.py",
+    "line": 342,
+    "callers": 30
+   }
+  ]
+ },
+ "dead_code": {
+  "count": 0,
+  "candidates": [],
+  "note": "Static analysis: no references found. Dynamic dispatch, plugins and public API use are not visible."
+ },
+ "references": {
+  "resolved": 4038,
+  "ambiguous": 0,
+  "external": 2611,
+  "unresolved": 1911,
+  "dynamic": 352,
+  "resolution_rate": 0.6409
+ },
+ "findings": [
+  {
+   "id": "complexity.very_high",
+   "severity": "high",
+   "category": "complexity",
+   "title": "5 functions are very complex (21+)",
+   "detail": "A function with more than 20 independent paths is hard to follow and practically impossible to test path by path. Split the largest ones into smaller functions with one job each, starting with those listed.",
+   "evidence": [
+    {
+     "path": "src/click/core.py",
+     "line": 3614,
+     "symbol_id": 404,
+     "file_id": 107,
+     "label": "click.core.Option.get_help_extra (35)"
+    },
+    {
+     "path": "src/click/_textwrap.py",
+     "line": 66,
+     "symbol_id": 213,
+     "file_id": 104,
+     "label": "click._textwrap.TextWrapper._wrap_chunks (31)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 370,
+     "symbol_id": 261,
+     "file_id": 107,
+     "label": "click.core.Context.__init__ (28)"
+    },
+    {
+     "path": "src/click/termui.py",
+     "line": 641,
+     "symbol_id": 604,
+     "file_id": 115,
+     "label": "click.termui.style (21)"
+    },
+    {
+     "path": "src/click/_compat.py",
+     "line": 374,
+     "symbol_id": 141,
+     "file_id": 102,
+     "label": "click._compat.open_stream (21)"
+    }
+   ]
+  },
+  {
+   "id": "size.long_functions",
+   "severity": "medium",
+   "category": "size",
+   "title": "8 functions are longer than 100 lines",
+   "detail": "Long functions usually do several things at once, which makes them harder to review and reuse. Look for steps that can become named helpers.",
+   "evidence": [
+    {
+     "path": "src/click/testing.py",
+     "line": 398,
+     "symbol_id": 654,
+     "file_id": 116,
+     "label": "click.testing.CliRunner.isolation (197 lines)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 370,
+     "symbol_id": 261,
+     "file_id": 107,
+     "label": "click.core.Context.__init__ (175 lines)"
+    },
+    {
+     "path": "src/click/termui.py",
+     "line": 443,
+     "symbol_id": 601,
+     "file_id": 115,
+     "label": "click.termui.progressbar (157 lines)"
+    },
+    {
+     "path": "src/click/testing.py",
+     "line": 596,
+     "symbol_id": 660,
+     "file_id": 116,
+     "label": "click.testing.CliRunner.invoke (144 lines)"
+    },
+    {
+     "path": "src/click/decorators.py",
+     "line": 421,
+     "symbol_id": 451,
+     "file_id": 108,
+     "label": "click.decorators.version_option (138 lines)"
+    }
+   ]
+  },
+  {
+   "id": "testing.untested_modules",
+   "severity": "medium",
+   "category": "testing",
+   "title": "12 modules are never imported or referenced by tests",
+   "detail": "No test file imports or calls anything in these modules, so a change there is not checked by any test that RepoLens can see. Modules many others depend on are listed first.",
+   "evidence": [
+    {
+     "path": "examples/aliases/aliases.py",
+     "line": 1,
+     "symbol_id": 2,
+     "file_id": 64,
+     "label": "aliases (used by 1)"
+    },
+    {
+     "path": "src/click/_winconsole.py",
+     "line": 1,
+     "symbol_id": 222,
+     "file_id": 106,
+     "label": "click._winconsole (used by 1)"
+    },
+    {
+     "path": "examples/colors/colors.py",
+     "line": 1,
+     "symbol_id": 19,
+     "file_id": 67,
+     "label": "colors (used by 0)"
+    },
+    {
+     "path": "examples/completion/completion.py",
+     "line": 1,
+     "symbol_id": 21,
+     "file_id": 70,
+     "label": "completion (used by 0)"
+    },
+    {
+     "path": "examples/complex/complex/commands/cmd_init.py",
+     "line": 1,
+     "symbol_id": 40,
+     "file_id": 76,
+     "label": "complex.commands.cmd_init (used by 0)"
+    }
+   ]
+  },
+  {
+   "id": "structure.import_cycles",
+   "severity": "medium",
+   "category": "structure",
+   "title": "1 import cycle across 2 modules",
+   "detail": "Modules that import each other at the top level cannot be understood, tested or reused separately, and the cycle can break at import time. Move the shared code into a module both can import, or import lazily. The largest cycle has 2 modules.",
+   "evidence": [
+    {
+     "path": "src/click/_compat.py",
+     "line": 1,
+     "symbol_id": 109,
+     "file_id": 102,
+     "label": "click._compat (cycle of 2)"
+    },
+    {
+     "path": "src/click/_winconsole.py",
+     "line": 1,
+     "symbol_id": 222,
+     "file_id": 106,
+     "label": "click._winconsole (cycle of 2)"
+    }
+   ]
+  },
+  {
+   "id": "complexity.elevated",
+   "severity": "low",
+   "category": "complexity",
+   "title": "24 functions have complexity 11-20",
+   "detail": "These functions branch enough that changes to them deserve extra review and tests for each branch. Consider extracting the branches into helpers.",
+   "evidence": [
+    {
+     "path": "src/click/testing.py",
+     "line": 596,
+     "symbol_id": 660,
+     "file_id": 116,
+     "label": "click.testing.CliRunner.invoke (19)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 1515,
+     "symbol_id": 317,
+     "file_id": 107,
+     "label": "click.core.Command.main (19)"
+    },
+    {
+     "path": "src/click/_termui_impl.py",
+     "line": 799,
+     "symbol_id": 202,
+     "file_id": 103,
+     "label": "click._termui_impl.open_url (19)"
+    },
+    {
+     "path": "src/click/types.py",
+     "line": 1161,
+     "symbol_id": 751,
+     "file_id": 117,
+     "label": "click.types.Path.convert (18)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 3449,
+     "symbol_id": 399,
+     "file_id": 107,
+     "label": "click.core.Option._parse_decls (18)"
+    }
+   ]
+  },
+  {
+   "id": "documentation.low_coverage",
+   "severity": "low",
+   "category": "documentation",
+   "title": "158 public symbols have no docstring (62% documented)",
+   "detail": "Public classes and functions are what other code and other people use. Document the most called ones first; they are listed by caller count.",
+   "evidence": [
+    {
+     "path": "src/click/core.py",
+     "line": 1132,
+     "symbol_id": 298,
+     "file_id": 107,
+     "label": "click.core.Command.get_params (7 callers)"
+    },
+    {
+     "path": "examples/imagepipe/imagepipe.py",
+     "line": 69,
+     "symbol_id": 52,
+     "file_id": 83,
+     "label": "imagepipe.copy_filename (6 callers)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 2222,
+     "symbol_id": 354,
+     "file_id": 107,
+     "label": "click.core.CommandCollection.list_commands (4 callers)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 2120,
+     "symbol_id": 347,
+     "file_id": 107,
+     "label": "click.core.Group.resolve_command (4 callers)"
+    },
+    {
+     "path": "examples/complex/complex/cli.py",
+     "line": 32,
+     "symbol_id": 36,
+     "file_id": 74,
+     "label": "complex.cli.ComplexCLI.list_commands (4 callers)"
+    }
+   ]
+  },
+  {
+   "id": "size.long_modules",
+   "severity": "low",
+   "category": "size",
+   "title": "3 modules are longer than 1000 lines",
+   "detail": "Very long modules tend to mix responsibilities and attract merge conflicts. Consider splitting them along the groups of classes and functions they hold.",
+   "evidence": [
+    {
+     "path": "src/click/core.py",
+     "line": 1,
+     "symbol_id": 248,
+     "file_id": 107,
+     "label": "src/click/core.py (4038 lines)"
+    },
+    {
+     "path": "src/click/types.py",
+     "line": 1,
+     "symbol_id": 662,
+     "file_id": 117,
+     "label": "src/click/types.py (1437 lines)"
+    },
+    {
+     "path": "src/click/termui.py",
+     "line": 1,
+     "symbol_id": 586,
+     "file_id": 115,
+     "label": "src/click/termui.py (1024 lines)"
+    }
+   ]
+  },
+  {
+   "id": "resolution.low",
+   "severity": "low",
+   "category": "resolution",
+   "title": "Only 64% of in-repository references could be resolved",
+   "detail": "Calls on objects of unknown type, dynamic attribute access and ambiguous names leave gaps in the dependency graph, so impact analysis and test selection are less complete for this repository. Type annotations on parameters and attributes help.",
+   "evidence": [
+    {
+     "path": null,
+     "line": null,
+     "symbol_id": null,
+     "file_id": null,
+     "label": "1911 unresolved"
+    },
+    {
+     "path": null,
+     "line": null,
+     "symbol_id": null,
+     "file_id": null,
+     "label": "352 dynamic"
+    }
+   ]
+  },
+  {
+   "id": "structure.hubs",
+   "severity": "info",
+   "category": "structure",
+   "title": "10 definitions have 25 or more callers",
+   "detail": "Changes to these ripple widely. Keep their behaviour stable and well tested; RepoLens's impact analysis will flag their callers when they change.",
+   "evidence": [
+    {
+     "path": "src/click/utils.py",
+     "line": 240,
+     "symbol_id": 789,
+     "file_id": 118,
+     "label": "click.utils.echo (342 callers)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 1065,
+     "symbol_id": 294,
+     "file_id": 107,
+     "label": "click.core.Command.__init__ (84 callers)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 989,
+     "symbol_id": 293,
+     "file_id": 107,
+     "label": "click.core.Command (81 callers)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 3149,
+     "symbol_id": 388,
+     "file_id": 107,
+     "label": "click.core.Option.__init__ (74 callers)"
+    },
+    {
+     "path": "src/click/core.py",
+     "line": 3057,
+     "symbol_id": 387,
+     "file_id": 107,
+     "label": "click.core.Option (72 callers)"
+    }
+   ]
+  }
+ ]
+}

@@ -24,6 +24,15 @@ test("complete workflow: ingest, explore, impact, select, execute, ask", async (
   await shot(page, "1-overview");
   const repoUrl = page.url();
 
+  // 1b. Read the health report and follow its evidence into the explorer.
+  await page.getByRole("link", { name: "Report", exact: true }).click();
+  await expect(page).toHaveURL(/\/repositories\/[0-9a-f-]+\/insights/);
+  await expect(page.getByRole("img", { name: /^Health score \d+ out of 100, grade [A-F]$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Findings/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Complexity", exact: true })).toBeVisible();
+  await shot(page, "1b-report");
+  await page.goto(repoUrl);
+
   // 2. Explore the code graph.
   await page.getByRole("link", { name: "Code explorer" }).click();
   await page.getByLabel("Search symbols").fill("with_tax");
