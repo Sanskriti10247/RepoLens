@@ -55,9 +55,9 @@ export function ApiStatus({ pollMs = 15000, wakeMs = 180_000 }: { pollMs?: numbe
   }[state.kind];
 
   return (
-    <span className={`status status-${state.kind}`} role="status" aria-live="polite">
+    <span className={`status status-${state.kind}`} role="status" aria-live="polite" title={label}>
       <span className="status-dot" aria-hidden="true" />
-      {label}
+      <span className="status-text">{label}</span>
     </span>
   );
 }

@@ -315,8 +315,7 @@ export function SystemDiagram() {
         key={narrow ? "tall" : "wide"}
       >
         <title id="sys-title">
-          RepoLens architecture: web app, API, PostgreSQL with the job queue, workers, Git mirrors, parser, code graph,
-          impact analysis and the Docker sandbox{sandboxOff ? " (switched off on this instance)" : ""}.
+          {`RepoLens architecture: web app, API, PostgreSQL with the job queue, workers, Git mirrors, parser, code graph, impact analysis and the Docker sandbox${sandboxOff ? " (switched off on this instance)" : ""}.`}
         </title>
         <defs>
           <marker id="sys-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto">

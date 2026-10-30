@@ -19,6 +19,7 @@ import {
   Stats,
   When,
 } from "@/components/ui";
+import { WithRail } from "@/components/SectionRail";
 import { ApiError, postJson } from "@/lib/api";
 import { TERMINAL_CHANGE, label, shortSha } from "@/lib/format";
 import type {
@@ -33,13 +34,23 @@ import type {
 import { useApi } from "@/lib/useApi";
 import { useReadOnly } from "@/lib/useReadOnly";
 
+const RAIL: [string, string][] = [
+  ["verdict", "Verification"],
+  ["risk", "Risk factors"],
+  ["uncertainty", "Uncertainty"],
+  ["changed-files", "Changed files"],
+  ["changed-symbols", "Changed symbols"],
+  ["impacted", "Impacted symbols"],
+  ["selection", "Test selection"],
+];
+
 export default function ImpactPage() {
   const { id } = useParams<{ id: string }>();
   const change = useApi<ChangeSet>(`/impact/${id}`, {
     pollWhile: (c) => !TERMINAL_CHANGE.has(c.status),
   });
   if (change.error) return <ErrorPanel error={change.error} />;
-  if (!change.data) return <Loading what="Loading impact analysis" />;
+  if (!change.data) return <Loading what="Loading impact analysis" shape="block" />;
   const c = change.data;
   const done = c.status === "SUCCEEDED";
   return (
@@ -51,9 +62,9 @@ export default function ImpactPage() {
           [`${shortRef(c.base_ref)} → ${shortRef(c.target_ref)}`, null],
         ]}
       />
-      <div className="page-head">
+      <div className="page-head page-head-wide">
         <h1>
-          Impact of <span className="mono">{shortRef(c.base_ref)}</span> →{" "}
+          Impact of <span className="mono">{shortRef(c.base_ref)}</span> <span className="h1-arrow">→</span>{" "}
           <span className="mono">{shortRef(c.target_ref)}</span> <Badge value={c.status} />
         </h1>
         <KeyValues
@@ -74,19 +85,60 @@ export default function ImpactPage() {
         )}
         {c.error && <FailureNote>{c.error}</FailureNote>}
       </div>
-      {done && <Report changeId={id} />}
-      {done && <ChangedFiles changeId={id} />}
-      {done && <ChangedSymbols changeId={id} />}
-      {done && <ImpactItems changeId={id} />}
-      {done && <Plans changeId={id} />}
+      {done && (
+        <WithRail items={RAIL}>
+          <Report changeId={id} />
+          <ChangedFiles changeId={id} />
+          <ChangedSymbols changeId={id} />
+          <ImpactItems changeId={id} />
+          <Plans changeId={id} />
+        </WithRail>
+      )}
     </>
   );
+}
+
+/** A risk factor's evidence: a few names as chips, a number as is, anything else as JSON. */
+function FactorValue({ value }: { value: unknown }) {
+  const [open, setOpen] = useState(false);
+  if (value === null || value === undefined || value === "") return null;
+  if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
+    const names = value as string[];
+    const shown = open ? names : names.slice(0, 4);
+    return (
+      <ul className="factor-values" aria-label="Evidence">
+        {shown.map((name) => (
+          <li key={name} className="evidence-chip" title={name}>
+            {name}
+          </li>
+        ))}
+        {names.length > 4 && (
+          <li>
+            <button type="button" className="link small" onClick={() => setOpen(!open)} aria-expanded={open}>
+              {open ? "fewer" : `${names.length - 4} more`}
+            </button>
+          </li>
+        )}
+      </ul>
+    );
+  }
+  if (typeof value === "number" || typeof value === "string") return <span className="row-sub mono">{String(value)}</span>;
+  if (typeof value === "object" && Object.values(value).every((v) => typeof v === "number" || typeof v === "string")) {
+    return (
+      <span className="row-sub">
+        {Object.entries(value)
+          .map(([key, v]) => `${label(key).toLowerCase()} ${String(v)}`)
+          .join(" · ")}
+      </span>
+    );
+  }
+  return <span className="row-sub mono wrap anywhere">{JSON.stringify(value)}</span>;
 }
 
 function Report({ changeId }: { changeId: string }) {
   const { data, error } = useApi<ImpactReport>(`/impact/${changeId}/report`);
   if (error) return <ErrorPanel error={error} />;
-  if (!data) return <Loading what="Loading report" />;
+  if (!data) return <Loading what="Loading report" shape="stats" rows={6} />;
   const counts = data.counts as Record<string, number>;
   const hidden = data.uncertainty.possible_hidden_callers ?? [];
   return (
@@ -100,7 +152,7 @@ function Report({ changeId }: { changeId: string }) {
         <Stat label="Recommended" value={<Badge value={data.recommended_scope} text={label(data.recommended_scope)} />} />
       </Stats>
       <div className="columns">
-        <Card title="Recommended verification">
+        <Card id="verdict" title="Recommended verification">
           <ul className="rules">
             {data.scope_reasons.map((r) => (
               <li key={r}>{r}</li>
@@ -119,7 +171,7 @@ function Report({ changeId }: { changeId: string }) {
             </>
           )}
         </Card>
-        <Card title="Risk factors">
+        <Card id="risk" title="Risk factors">
           {data.risk_factors.length === 0 ? (
             <p className="muted">No risk factors apply.</p>
           ) : (
@@ -131,7 +183,7 @@ function Report({ changeId }: { changeId: string }) {
                     <td className="mono right nowrap">+{f.points}</td>
                     <td>
                       {f.detail}
-                      <span className="row-sub mono">{JSON.stringify(f.value)}</span>
+                      <FactorValue value={f.value} />
                     </td>
                   </tr>
                 ))}
@@ -141,7 +193,7 @@ function Report({ changeId }: { changeId: string }) {
           <p className="hint">{data.disclaimer}</p>
         </Card>
       </div>
-      <Card title="Uncertainty">
+      <Card id="uncertainty" title="Uncertainty">
         <KeyValues
           items={[
             ["Unresolved references in impacted code", data.uncertainty.unresolved_references_in_impacted_code ?? 0],
@@ -172,7 +224,7 @@ function ChangedFiles({ changeId }: { changeId: string }) {
   if (error) return <ErrorPanel error={error} />;
   if (!data) return null;
   return (
-    <Card title={`Changed files (${data.page.total})`}>
+    <Card id="changed-files" title={<>Changed files <span className="count-chip num">{data.page.total}</span></>}>
       {data.items.length === 0 ? (
         <Empty>The two revisions have identical trees.</Empty>
       ) : (
@@ -211,7 +263,7 @@ function ChangedSymbols({ changeId }: { changeId: string }) {
   const { data } = useApi<Page<ChangedSymbol>>(`/impact/${changeId}/changed-symbols?limit=100`);
   if (!data || data.items.length === 0) return null;
   return (
-    <Card title={`Changed symbols (${data.page.total})`}>
+    <Card id="changed-symbols" title={<>Changed symbols <span className="count-chip num">{data.page.total}</span></>}>
       <table className="table small">
         <thead>
           <tr>
@@ -259,7 +311,12 @@ function ImpactItems({ changeId }: { changeId: string }) {
   const { data, error } = useApi<Page<ImpactItem>>(`/impact/${changeId}/items?${query}`);
   return (
     <Card
-      title={`Changed and impacted symbols${data ? ` (${data.page.total})` : ""}`}
+      id="impacted"
+      title={
+        <>
+          Changed and impacted symbols {data && <span className="count-chip num">{data.page.total}</span>}
+        </>
+      }
       actions={
         <>
           <select value={strength} onChange={(e) => setStrength(e.target.value)} aria-label="Strength">
@@ -296,6 +353,7 @@ function ImpactItems({ changeId }: { changeId: string }) {
                   title="Show the path from the change"
                 >
                   <td className="mono">
+                    <span className="chev" aria-hidden="true" />
                     {item.qualified_name}
                     {item.is_test && <span className="tag">test</span>}
                   </td>
@@ -359,7 +417,7 @@ function Plans({ changeId }: { changeId: string }) {
     }
   }
   return (
-    <Card title="Test selection">
+    <Card id="selection" title="Test selection">
       {readOnly === true ? (
         <ReadOnlyNotice what="selecting new tests" />
       ) : (
@@ -383,7 +441,12 @@ function Plans({ changeId }: { changeId: string }) {
             </label>
           </>
         )}
-        <button type="submit" disabled={readOnly === null}>Select tests</button>
+        <button type="submit" disabled={readOnly === null}>
+          Select tests
+          <span className="arrow" aria-hidden="true">
+            →
+          </span>
+        </button>
       </form>
       )}
       {error && <ErrorPanel error={error} title="Could not create a test plan" />}

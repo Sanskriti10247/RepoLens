@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { WithRail } from "@/components/SectionRail";
 import { Badge, Card, Empty, ErrorPanel, KeyValues, Loading, Progress, Stat, Stats } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { formatDuration, formatTime, label, shortSha } from "@/lib/format";
@@ -22,6 +23,13 @@ const EXPLANATIONS: Record<string, string> = {
   RESOURCE_LIMIT_EXCEEDED: "A memory, process or workspace limit was reached.",
 };
 
+const RAIL: [string, string][] = [
+  ["details", "Details"],
+  ["results", "Results"],
+  ["coverage", "Coverage"],
+  ["output", "Output"],
+];
+
 export default function TestRunPage() {
   const { id } = useParams<{ id: string }>();
   const run = useApi<TestRun>(`/test-runs/${id}`, {
@@ -31,7 +39,7 @@ export default function TestRunPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const readOnly = useReadOnly();
   if (run.error) return <ErrorPanel error={run.error} />;
-  if (!run.data) return <Loading what="Loading test run" />;
+  if (!run.data) return <Loading what="Loading test run" shape="block" />;
   const r = run.data;
   const completed = r.status === "COMPLETED";
 
@@ -58,11 +66,15 @@ export default function TestRunPage() {
           </>
         )}
       </p>
-      <h1>
-        {label(r.mode)} run{" "}
-        {completed ? <Badge value={r.outcome} /> : <Badge value={r.status} />}
-      </h1>
+      <div className="page-head page-head-wide">
+        <h1>
+          {label(r.mode)} run{" "}
+          {completed ? <Badge value={r.outcome} /> : <Badge value={r.status} />}
+        </h1>
+      </div>
+      <WithRail items={RAIL}>
       <Card
+        id="details"
         title="Details"
         actions={
           !completed && readOnly !== true && (
@@ -111,6 +123,7 @@ export default function TestRunPage() {
       {completed && <Results runId={id} />}
       {completed && r.coverage && <Coverage runId={id} />}
       {completed && <Logs runId={id} />}
+      </WithRail>
     </>
   );
 }
@@ -118,11 +131,11 @@ export default function TestRunPage() {
 function Results({ runId }: { runId: string }) {
   const { data } = useApi<Page<TestResult>>(`/test-runs/${runId}/results?limit=100`);
   if (!data) return null;
-  if (data.items.length === 0) return <Card title="Results"><Empty>No per-test results were reported.</Empty></Card>;
+  if (data.items.length === 0) return <Card id="results" title="Results"><Empty>No per-test results were reported.</Empty></Card>;
   const order: Record<string, number> = { FAILED: 0, ERROR: 1, SKIPPED: 2, PASSED: 3 };
   const sorted = [...data.items].sort((a, b) => (order[a.outcome] ?? 9) - (order[b.outcome] ?? 9));
   return (
-    <Card title={`Results (${data.page.total})`}>
+    <Card id="results" title={<>Results <span className="count-chip num">{data.page.total}</span></>}>
       <table className="table small">
         <thead>
           <tr>
@@ -154,7 +167,7 @@ function Coverage({ runId }: { runId: string }) {
   const { data } = useApi<CoverageSummary>(`/test-runs/${runId}/coverage`);
   if (!data) return null;
   return (
-    <Card title="Coverage evidence">
+    <Card id="coverage" title="Coverage evidence">
       {data.files.length === 0 ? (
         <Empty>No coverage was recorded.</Empty>
       ) : (
@@ -186,7 +199,7 @@ function Logs({ runId }: { runId: string }) {
   const { data } = useApi<RunLogs>(`/test-runs/${runId}/logs`);
   if (!data) return null;
   return (
-    <Card title="Output">
+    <Card id="output" title="Output">
       {data.output_truncated && <p className="warn-text small">Output exceeded its limit and was truncated.</p>}
       <h3>pytest output (tail)</h3>
       <pre className="log">{data.stdout_tail || "(empty)"}</pre>

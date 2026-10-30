@@ -43,7 +43,7 @@ export default function ImpactListPage() {
 
   return (
     <>
-      <Card title="Analyze a change">
+      <Card title="Compare two revisions">
         {readOnly === true ? (
           <ReadOnlyNotice what="analyzing new changes" />
         ) : (
@@ -65,6 +65,11 @@ export default function ImpactListPage() {
           </label>
           <button type="submit" disabled={busy || readOnly === null || !base.trim() || !target.trim()}>
             {busy ? "Queueing…" : "Analyze impact"}
+            {!busy && (
+              <span className="arrow" aria-hidden="true">
+                →
+              </span>
+            )}
           </button>
         </form>
         <p className="hint">
@@ -75,9 +80,9 @@ export default function ImpactListPage() {
         </>
         )}
       </Card>
-      <Card title="Impact analyses">
+      <Card title={list.data ? <>Impact analyses <span className="count-chip num">{list.data.page.total}</span></> : "Impact analyses"}>
         {list.error && <ErrorPanel error={list.error} />}
-        {list.loading && !list.data && <Loading />}
+        {list.loading && !list.data && <Loading what="Loading impact analyses" shape="table" />}
         {list.data && list.data.items.length === 0 && (
           <Empty>No changes compared yet. Pick two revisions above, for example the default branch and a feature branch.</Empty>
         )}
@@ -96,8 +101,11 @@ export default function ImpactListPage() {
               {list.data.items.map((c) => (
                 <tr key={c.id}>
                   <td>
-                    <Link href={`/impact/${c.id}`} className="row-title mono">
+                    <Link href={`/impact/${c.id}`} className="row-title row-link mono">
                       {refName(c.base_ref)} → {refName(c.target_ref)}
+                      <span className="arrow" aria-hidden="true">
+                        →
+                      </span>
                     </Link>
                     <span className="row-sub mono">
                       {shortSha(c.base_sha)} → {shortSha(c.target_sha)}

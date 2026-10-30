@@ -662,3 +662,180 @@ class AnswerOut(Schema):
     insufficient_evidence: bool
     matched_symbols: list[str]
     evidence: list[EvidenceOut]
+
+
+# -- insights (GET /analyses/{id}/insights; formulas in docs/insights.md) ---------------------
+
+
+class InsightComponentOut(Schema):
+    key: str
+    label: str
+    score: int | None = Field(description="0-100; null when there is no data to score")
+    weight: float = Field(description="Weight applied in the overall score (0 when excluded)")
+    detail: str
+
+
+class InsightScoreOut(Schema):
+    overall: int | None
+    grade: Literal["A", "B", "C", "D", "F"] | None
+    components: list[InsightComponentOut]
+    method: str
+
+
+class LanguageCountOut(Schema):
+    language: str
+    files: int
+    bytes: int
+
+
+class InsightOverviewOut(Schema):
+    files: int
+    source_files: int
+    test_files: int
+    bytes: int
+    languages: list[LanguageCountOut]
+    roles: dict[str, int]
+    modules: int
+    symbols: int
+    functions: int
+    classes: int
+    methods: int
+
+
+class InsightSymbolOut(Schema):
+    symbol_id: int
+    qualified_name: str
+    kind: str
+    file_id: int
+    path: str
+    line: int
+
+
+class ComplexSymbolOut(InsightSymbolOut):
+    complexity: int
+    lines: int
+
+
+class SizedSymbolOut(InsightSymbolOut):
+    lines: int
+
+
+class CalledSymbolOut(InsightSymbolOut):
+    callers: int
+
+
+class BucketOut(Schema):
+    bucket: str
+    count: int
+
+
+class InsightComplexityOut(Schema):
+    available: bool = Field(description="False for analyses parsed before complexity existed")
+    functions: int = Field(description="Non-test functions and methods measured")
+    distribution: list[BucketOut]
+    mean: float | None
+    p90: int | None
+    top: list[ComplexSymbolOut]
+
+
+class LargeFileOut(Schema):
+    file_id: int
+    path: str
+    bytes: int
+    symbols: int
+    lines: int | None
+
+
+class InsightSizeOut(Schema):
+    longest_functions: list[SizedSymbolOut]
+    largest_files: list[LargeFileOut]
+
+
+class InsightDocumentationOut(Schema):
+    public_symbols: int
+    documented: int
+    coverage: float | None
+    undocumented: list[CalledSymbolOut]
+
+
+class UntestedModuleOut(Schema):
+    module: str
+    symbol_id: int
+    file_id: int
+    path: str
+    symbols: int
+    fan_in: int
+
+
+class InsightTestingOut(Schema):
+    test_files: int
+    test_functions: int
+    modules_with_tests: int
+    modules_without_tests: int
+    coverage: float | None
+    untested_modules: list[UntestedModuleOut]
+
+
+class ModuleCouplingOut(Schema):
+    module: str
+    symbol_id: int
+    path: str
+    fan_in: int
+    fan_out: int
+    instability: float | None
+
+
+class InsightCouplingOut(Schema):
+    modules: list[ModuleCouplingOut]
+    cycles: list[list[str]]
+    hubs: list[CalledSymbolOut]
+
+
+class InsightDeadCodeOut(Schema):
+    count: int
+    candidates: list[SizedSymbolOut]
+    note: str
+
+
+class InsightReferencesOut(Schema):
+    resolved: int
+    ambiguous: int
+    external: int
+    unresolved: int
+    dynamic: int
+    resolution_rate: float | None = Field(
+        description="resolved / (resolved + ambiguous + unresolved + dynamic)"
+    )
+
+
+class FindingEvidenceOut(Schema):
+    path: str | None
+    line: int | None
+    symbol_id: int | None
+    file_id: int | None
+    label: str
+
+
+class FindingOut(Schema):
+    id: str
+    severity: Literal["high", "medium", "low", "info"]
+    category: str
+    title: str
+    detail: str
+    evidence: list[FindingEvidenceOut]
+
+
+class InsightsOut(Schema):
+    analysis_id: uuid.UUID
+    results_run_id: uuid.UUID = Field(description="Run that owns the results")
+    commit_sha: str
+    score: InsightScoreOut
+    overview: InsightOverviewOut
+    complexity: InsightComplexityOut
+    size: InsightSizeOut
+    documentation: InsightDocumentationOut
+    testing: InsightTestingOut
+    coupling: InsightCouplingOut
+    dead_code: InsightDeadCodeOut
+    references: InsightReferencesOut
+    findings: list[FindingOut]

@@ -5,8 +5,10 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { AnalysisPipeline } from "@/components/AnalysisPipeline";
+import { HealthCard } from "@/components/HealthCard";
 import { GraphCharts } from "@/components/GraphCharts";
 import { ModuleArchitecture } from "@/components/ModuleGraph";
+import { WithRail } from "@/components/SectionRail";
 import {
   Badge,
   Card,
@@ -28,6 +30,19 @@ import type { Analysis, AnalysisSummary, FilePage, Page, TestCase, TestRun, Warn
 import { useApi } from "@/lib/useApi";
 import { useCapabilities, useReadOnly } from "@/lib/useReadOnly";
 
+const RAIL: [string, string][] = [
+  ["analysis", "Analysis"],
+  ["health", "Health"],
+  ["architecture", "Architecture"],
+  ["glance", "Graph at a glance"],
+  ["languages", "Languages"],
+  ["resolution", "Resolution"],
+  ["completeness", "Indexing"],
+  ["tests", "Tests"],
+  ["warnings", "Warnings"],
+  ["revisions", "Revisions"],
+];
+
 export default function RepositoryOverview() {
   const { id } = useParams<{ id: string }>();
   const analyses = useApi<Page<AnalysisSummary>>(`/repositories/${id}/analyses?limit=20`, {
@@ -37,16 +52,15 @@ export default function RepositoryOverview() {
   const current = selected ?? analyses.data?.items[0]?.id ?? null;
 
   return (
-    <>
-      <AnalyzeForm repoId={id} onQueued={analyses.reload} />
+    <WithRail items={RAIL}>
       {analyses.error && <ErrorPanel error={analyses.error} />}
-      {analyses.loading && !analyses.data && <Loading what="Loading analyses" />}
+      {analyses.loading && !analyses.data && <Loading what="Loading analyses" shape="block" />}
       {analyses.data && analyses.data.items.length === 0 && (
-        <Empty>No analysis has been recorded for this repository yet.</Empty>
+        <Empty>No analysis has been recorded for this repository yet. Analyze a revision below to start.</Empty>
       )}
       {current && <AnalysisDetail analysisId={current} repoId={id} onChange={analyses.reload} />}
-      {analyses.data && analyses.data.items.length > 1 && (
-        <Card title="Earlier analyses">
+      <Card id="revisions" title="Revisions" actions={<AnalyzeForm repoId={id} onQueued={analyses.reload} />}>
+        {analyses.data && analyses.data.items.length > 0 ? (
           <table className="table">
             <thead>
               <tr>
@@ -76,7 +90,7 @@ export default function RepositoryOverview() {
                   </td>
                   <td className="right">
                     {a.id === current ? (
-                      <span className="muted small">shown above</span>
+                      <span className="muted small">shown</span>
                     ) : (
                       <button className="link" onClick={() => setSelected(a.id)}>
                         View
@@ -87,9 +101,11 @@ export default function RepositoryOverview() {
               ))}
             </tbody>
           </table>
-        </Card>
-      )}
-    </>
+        ) : (
+          <p className="muted small">Each analysis of a branch, tag or commit is listed here.</p>
+        )}
+      </Card>
+    </WithRail>
   );
 }
 
@@ -147,7 +163,7 @@ function AnalysisDetail({
     pollMs: 1000,
   });
   if (error) return <ErrorPanel error={error} />;
-  if (loading && !data) return <Loading what="Loading analysis" />;
+  if (loading && !data) return <Loading what="Loading analysis" shape="block" />;
   if (!data) return null;
   const done = data.status === "SUCCEEDED" || data.status === "PARTIAL" || data.status === "REUSED";
   const counts = (data.counts ?? {}) as Record<string, unknown>;
@@ -155,6 +171,7 @@ function AnalysisDetail({
   return (
     <>
       <Card
+        id="analysis"
         title={
           <>
             Analysis of{" "}
@@ -199,21 +216,22 @@ function AnalysisDetail({
               hint="static discovery"
             />
           </Stats>
-          <Card title="Architecture">
+          <HealthCard analysisId={data.id} repoId={repoId} />
+          <Card id="architecture" title="Architecture">
             <p className="hint graph-intro">
               Modules and the dependencies between them, drawn from the resolved graph. Importers sit above what they
               import; select a node to see what it depends on and what uses it.
             </p>
             <ModuleArchitecture analysisId={data.id} repoId={repoId} />
           </Card>
-          <Card title="Graph at a glance">
+          <Card id="glance" title="Graph at a glance">
             <GraphCharts analysisId={data.id} repoId={repoId} />
           </Card>
           <div className="columns">
-            <Card title="Languages">
+            <Card id="languages" title="Languages">
               <Languages inventory={data.snapshot.language_inventory ?? {}} />
             </Card>
-            <Card title="Reference resolution">
+            <Card id="resolution" title="Reference resolution">
               <Distribution values={references} />
               <p className="hint">
                 Unresolved and dynamic references are reported rather than guessed; they can hide real dependencies.
@@ -258,7 +276,7 @@ function IndexingCompleteness({ analysisId }: { analysisId: string }) {
   const { data, error } = useApi<FilePage>(`/analyses/${analysisId}/files?limit=1`);
   const incomplete = useApi<FilePage>(`/analyses/${analysisId}/files?status=PARSED_WITH_ERRORS&limit=20`);
   return (
-    <Card title="Indexing completeness">
+    <Card id="completeness" title="Indexing completeness">
       {error && <ErrorPanel error={error} />}
       {data && <Distribution values={data.status_counts} />}
       {incomplete.data && incomplete.data.items.length > 0 && (
@@ -298,6 +316,7 @@ function TestsCard({ analysisId, onChange }: { analysisId: string; onChange: () 
   }
   return (
     <Card
+      id="tests"
       title="Tests"
       actions={
         readOnly === true || sandbox === false ? undefined : (
@@ -347,7 +366,7 @@ function WarningsCard({ analysisId, issues }: { analysisId: string; issues: Reco
   const hasIssues = Object.keys(issues).length > 0;
   if (!data || (data.page.total === 0 && !hasIssues)) return null;
   return (
-    <Card title={`Warnings (${data.page.total})`}>
+    <Card id="warnings" title={<>Warnings <span className="count-chip num">{data.page.total}</span></>}>
       {hasIssues && (
         <>
           <h3>Snapshot findings</h3>

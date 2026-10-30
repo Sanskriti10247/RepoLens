@@ -69,3 +69,35 @@ export function useNow(intervalMs = 1000): number {
   }, [intervalMs]);
   return now;
 }
+
+/**
+ * Like ``useEasedNumber`` but starting from zero, so a figure counts up the first time it
+ * is shown. Returns ``target`` unchanged when motion is reduced.
+ */
+export function useCountUp(target: number, ms = 900): number {
+  const reduced = useReducedMotion();
+  const [shown, setShown] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    if (reduced || typeof requestAnimationFrame !== "function") {
+      from.current = target;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShown(target);
+      return;
+    }
+    const start = performance.now();
+    const origin = from.current;
+    let frame = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      const eased = 1 - Math.pow(1 - t, 4);
+      const value = origin + (target - origin) * eased;
+      from.current = value;
+      setShown(t < 1 ? value : target);
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [target, ms, reduced]);
+  return reduced ? target : Math.round(shown * 1000) / 1000;
+}

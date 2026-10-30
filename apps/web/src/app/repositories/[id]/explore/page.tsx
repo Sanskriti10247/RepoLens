@@ -13,7 +13,7 @@ const KINDS = ["", "MODULE", "CLASS", "FUNCTION", "ASYNC_FUNCTION", "METHOD", "A
 
 export default function ExplorePage() {
   return (
-    <Suspense fallback={<Loading />}>
+    <Suspense fallback={<Loading what="Loading the explorer" rows={6} />}>
       <Explorer />
     </Suspense>
   );
@@ -25,6 +25,8 @@ function Explorer() {
   const router = useRouter();
   const pathname = usePathname();
   const selected = params.get("symbol");
+  const file = params.get("file");
+  const line = Number(params.get("line")) || null;
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [kind, setKind] = useState(params.get("kind") ?? "");
   const [testsOnly, setTestsOnly] = useState(false);
@@ -43,6 +45,8 @@ function Explorer() {
   function select(symbolId: number) {
     const next = new URLSearchParams(params.toString());
     next.set("symbol", String(symbolId));
+    next.delete("file");
+    next.delete("line");
     if (query) next.set("q", query);
     router.replace(`${pathname}?${next}`);
   }
@@ -51,12 +55,20 @@ function Explorer() {
     <div className="explorer">
       <aside className="explorer-list">
         <div className="filters">
-          <input
-            placeholder="Search by name or dotted path"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search symbols"
-          />
+          <span className="search-field">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.5 10.5L14 14" />
+            </svg>
+            <input
+              placeholder="Search by name or dotted path"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Search symbols"
+              type="search"
+              spellCheck={false}
+            />
+          </span>
           <div className="filter-row">
             <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Symbol kind">
               {KINDS.map((k) => (
@@ -72,7 +84,7 @@ function Explorer() {
           </div>
         </div>
         {results.error && <ErrorPanel error={results.error} />}
-        {results.loading && !results.data && <Loading />}
+        {results.loading && !results.data && <Loading what="Searching symbols" rows={8} />}
         {results.data && (
           <>
             <p className="list-meta">
@@ -104,13 +116,23 @@ function Explorer() {
       <section className="explorer-detail">
         {selected ? (
           <SymbolPanel repoId={id} symbolId={selected} onSelect={select} />
+        ) : file ? (
+          <FilePanel repoId={id} fileId={file} line={line} />
         ) : (
           <div className="explorer-intro">
-            <Empty>Pick a symbol on the left to read its source and see who calls it, what it calls, and what it imports.</Empty>
+            <Empty>Pick a symbol to read its source and see who calls it, what it calls, and what it imports.</Empty>
             <p className="hint">
-              Search matches short names and dotted paths alike, e.g. <code className="inline-code">module.Class.method</code>.
-              Kinds: mod module, cls class, fn function, m method.
+              Search matches short names and dotted paths alike, for example{" "}
+              <code className="inline-code">module.Class.method</code>.
             </p>
+            <ul className="kinds-key" aria-label="Symbol kinds">
+              <li><b>mod</b>module</li>
+              <li><b>cls</b>class</li>
+              <li><b>fn</b>function</li>
+              <li><b>afn</b>async function</li>
+              <li><b>m</b>method</li>
+              <li><b>am</b>async method</li>
+            </ul>
           </div>
         )}
       </section>
@@ -120,6 +142,29 @@ function Explorer() {
 
 function kindIcon(kind: string): string {
   return { MODULE: "mod", CLASS: "cls", FUNCTION: "fn", ASYNC_FUNCTION: "afn", METHOD: "m", ASYNC_METHOD: "am" }[kind] ?? "?";
+}
+
+/** A whole file, opened from a report or a link that names a file (and optionally a line). */
+function FilePanel({ repoId, fileId, line }: { repoId: string; fileId: string; line: number | null }) {
+  const source = useApi<SourceFile>(`/repositories/${repoId}/files/${fileId}/source`);
+  if (source.error) return <ErrorPanel error={source.error} title="Source unavailable" />;
+  if (!source.data) return <Loading what="Loading source" rows={10} />;
+  const f = source.data;
+  return (
+    <Card
+      title={<span className="mono">{f.path}</span>}
+      actions={
+        <span className="muted small">
+          {line ? <>line {line} · </> : null}
+          <span className="sha" title={f.commit_sha}>
+            {shortSha(f.commit_sha)}
+          </span>
+        </span>
+      }
+    >
+      <SourceView content={f.content} highlight={line ? { start: line, end: line } : null} maxHeight={720} />
+    </Card>
+  );
 }
 
 function SymbolPanel({
@@ -135,7 +180,7 @@ function SymbolPanel({
   const fileId = detail.data?.symbol.file_id;
   const source = useApi<SourceFile>(fileId ? `/repositories/${repoId}/files/${fileId}/source` : null);
   if (detail.error) return <ErrorPanel error={detail.error} />;
-  if (!detail.data) return <Loading what="Loading symbol" />;
+  if (!detail.data) return <Loading what="Loading symbol" shape="block" />;
   const d = detail.data;
   const s = d.symbol;
   const lastLine = s.end_col === 0 && s.end_line > s.start_line ? s.end_line - 1 : s.end_line;
@@ -174,7 +219,7 @@ function SymbolPanel({
       <Card title="Source">
         {source.error && <ErrorPanel error={source.error} title="Source unavailable" />}
         {source.data && <SourceView content={source.data.content} highlight={{ start: s.start_line, end: lastLine }} />}
-        {!source.data && !source.error && <Loading what="Loading source" />}
+        {!source.data && !source.error && <Loading what="Loading source" rows={10} />}
       </Card>
       <div className="columns">
         <NeighbourList title={`Callers (${d.callers_total})`} items={d.callers} onSelect={onSelect} empty="No statically resolved callers." />
