@@ -476,6 +476,7 @@ class AnalysisPipeline:
                             "language": e.language,
                             "role": e.role.value,
                             "is_binary": e.is_binary,
+                            "line_count": e.line_count,
                         }
                         for e in inventory.entries
                     ],
