@@ -48,7 +48,7 @@ a new input gets a new row.
 | `repositories` | canonical URL | provider, default branch |
 | `repository_snapshots` | repository × commit SHA | file inventory in `source_files` (path, blob SHA, mode, language, size) |
 | `analysis_runs` | snapshot × parser version × engine version × config hash | one partial unique "result" row per key. A repeat request becomes a `REUSED` run pointing at the equivalent run. |
-| `symbols`, `symbol_references`, `dependency_edges`, `analysis_files`, `analysis_warnings` | analysis run | the code graph. Every reference has a resolution status and rule. Every edge has a provenance and confidence. |
+| `symbols`, `symbol_references`, `dependency_edges`, `analysis_files`, `analysis_warnings` | analysis run | the code graph. Every reference has a resolution status and rule. Every edge has a provenance and confidence. Functions and methods carry their cyclomatic complexity, which the health report ([insights.md](insights.md)) reads. |
 | `change_sets` → `changed_files`, `changed_symbols` | repository × base ref × target ref | resolved SHAs and both analysis runs recorded |
 | `impact_reports`, `impact_items` | change set | each item keeps its path back to a change and its evidence |
 | `test_cases` | analysis run | pytest tests, discovered statically when first needed |

@@ -68,7 +68,7 @@ curl -s -H "$H" -H 'content-type: application/json' \
 |---|---|
 | health | `GET /health`, `GET /ready` (database reachable, migrations at head). `/health` also reports `read_only`; with `REPOLENS_READ_ONLY=true` every request other than GET, HEAD and OPTIONS returns 403 with code `read_only`. It reports `sandbox`, false when `REPOLENS_SANDBOX_ENABLED=false`; test runs and collection then return 409 with code `sandbox_unavailable` |
 | repositories | `GET/POST /repositories`, `GET /repositories/{id}`, `GET/POST /repositories/{id}/analyses` |
-| analyses | `GET /analyses/{id}`, `POST /analyses/{id}/cancel`, `GET /analyses/{id}/snapshot-issues`, `…/files`, `…/warnings`, `…/modules`, `…/stats`, `…/tests` |
+| analyses | `GET /analyses/{id}`, `POST /analyses/{id}/cancel`, `GET /analyses/{id}/snapshot-issues`, `…/files`, `…/warnings`, `…/modules`, `…/stats`, `…/tests`, `…/insights` |
 | graph | `GET /repositories/{id}/symbols`, `…/symbols/{symbol_id}`, `…/graph`, `…/paths`, `…/files/{file_id}/source` |
 | impact | `POST/GET /repositories/{id}/impact`, `GET /impact/{id}`, `POST /impact/{id}/cancel`, `…/files`, `…/changed-symbols`, `…/report`, `…/items`, `…/test-plans` |
 | test plans | `POST /impact/{id}/test-plan`, `GET /test-plans/{id}`, `…/items` |
@@ -83,3 +83,42 @@ All paths are under `/api`.
 where the stage works through files, `current` (the file being read), `detail`,
 `stage_started_at`, `durations_ms` for the stages finished so far, and `updated_at`. It is
 `null` until a worker starts the run, and the last report stays after the run ends.
+
+### Repository health report
+
+`GET /analyses/{id}/insights` returns a health score and the metrics behind it for a
+finished analysis. It returns 404 for an unknown id and 409 with code `analysis_not_ready`
+while the analysis is queued or running, or if it ended without results (`FAILED`,
+`CANCELLED`). For a `REUSED` analysis it reads the results of the run in `results_run_id`.
+
+```bash
+curl -s $API/analyses/$run/insights | jq '.score'
+```
+
+The response has these sections:
+
+- `score`: `overall` (0-100, or `null` if no component has data), `grade` (A-F) and
+  `components`, each with `key`, `label`, `score` (`null` when excluded), the `weight`
+  actually applied and a one-line `detail`.
+- `overview`: file counts by role and language, total bytes, and symbol counts by kind.
+- `complexity`: `available` (false for analyses parsed before complexity was recorded),
+  the distribution in buckets 1-5, 6-10, 11-20 and 21+, `mean`, `p90` and the ten most
+  complex functions.
+- `size`: the ten longest functions and the ten largest Python files.
+- `documentation`: public symbols, how many have a docstring, and the most called
+  undocumented ones.
+- `testing`: test files and functions, testable modules with and without tests, and the
+  untested modules other modules depend on most.
+- `coupling`: per-module fan-in, fan-out and instability, import cycles (module names), and
+  the definitions with the most callers.
+- `dead_code`: the number of candidates, the ten largest, and a note on what static
+  analysis cannot see.
+- `references`: counts per resolution status (`resolved`, `ambiguous`, `external`,
+  `unresolved`, `dynamic`) and `resolution_rate`.
+- `findings`: rule-based findings with `id`, `severity`, `category`, `title`, `detail` and
+  `evidence` (`path`, `line`, `symbol_id`, `file_id`, `label`).
+
+Symbols carry `symbol_id`, `file_id`, `path` and `line`, so a client can link to
+`/repositories/{id}/symbols/{symbol_id}` or `/repositories/{id}/files/{file_id}/source`.
+Lists hold at most ten items and findings at most five pieces of evidence.
+Formulas, thresholds and the dead-code rules are in [insights.md](insights.md).
