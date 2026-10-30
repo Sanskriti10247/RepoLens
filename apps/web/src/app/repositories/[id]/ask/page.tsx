@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { Markdownish, inline } from "@/components/Markdownish";
+import { RetrievalTrace, type TraceState } from "@/components/RetrievalTrace";
 import { Badge, Card, ErrorPanel, ReadOnlyNotice } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { label, shortSha } from "@/lib/format";
@@ -25,21 +26,30 @@ export default function AskPage() {
   const [answer, setAnswer] = useState<QuestionAnswer | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [trace, setTrace] = useState<TraceState | null>(null);
   const readOnly = useReadOnly();
 
   async function ask(event: React.FormEvent) {
     event.preventDefault();
+    const asked = question.trim();
     setBusy(true);
     setError(null);
+    setAnswer(null);
+    setTrace({ kind: "pending", question: asked, since: Date.now() });
     try {
-      setAnswer(
-        await postJson<QuestionAnswer>(`/repositories/${id}/questions`, {
-          question: question.trim(),
-          use_model: useModel,
-        }),
-      );
+      const result = await postJson<QuestionAnswer>(`/repositories/${id}/questions`, {
+        question: asked,
+        use_model: useModel,
+      });
+      setAnswer(result);
+      setTrace({ kind: "answered", answer: result });
     } catch (caught) {
-      if (caught instanceof ApiError) setError(caught);
+      if (caught instanceof ApiError) {
+        setError(caught);
+        setTrace({ kind: "failed", question: asked, error: caught });
+      } else {
+        setTrace(null);
+      }
     } finally {
       setBusy(false);
     }
@@ -88,6 +98,7 @@ export default function AskPage() {
         )}
         {error && <ErrorPanel error={error} />}
       </Card>
+      {trace && <RetrievalTrace state={trace} />}
       {answer && <AnswerView answer={answer} />}
     </>
   );
