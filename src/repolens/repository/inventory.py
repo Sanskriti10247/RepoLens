@@ -158,7 +158,12 @@ def build_inventory(
     max_files: int,
     max_hash_bytes: int,
     checkpoint: Callable[[], None] = lambda: None,
+    on_file: Callable[[int, int, str], None] | None = None,
 ) -> Inventory:
+    """List and describe every file of ``commit_sha``.
+
+    ``on_file(done, total, path)`` is called before each file is read, for progress reports.
+    """
     raw = runner.run(
         ["ls-tree", "-r", "-z", "-l", "--full-tree", "--end-of-options", commit_sha],
         git_dir=mirror,
@@ -172,6 +177,8 @@ def build_inventory(
         for index, item in enumerate(pending):
             if index % 200 == 0:
                 checkpoint()
+            if on_file is not None:
+                on_file(index, len(pending), item[0])
             inventory.entries.append(_describe(reader, item, max_hash_bytes, inventory.issues))
     return inventory
 

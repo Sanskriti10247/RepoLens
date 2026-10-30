@@ -55,6 +55,7 @@ a new input gets a new row.
 | `test_plans`, `test_plan_items` | impact report × policy | every included or excluded test has evidence or an exclusion reason |
 | `test_runs`, `test_results`, `coverage_records` | plan or analysis | outcome, counts, bounded logs, sandbox limits used |
 | `parse_cache` | blob SHA × path × module × parser version | parser output reused across analyses |
+| `analysis_progress` | analysis run | the worker's latest progress report for a run (stage, files done, current file). A separate table, not a column on `analysis_runs`: the analysis transaction holds the run row `FOR UPDATE` while it parses and writes, and progress is written from short transactions of its own |
 | `jobs` | — | the work queue (below) |
 
 Status columns are text with CHECK constraints, mirroring the enums in `domain/enums.py`.
@@ -69,6 +70,13 @@ Migrations live in `migrations/` and are applied with Alembic.
 4. Parse each Python file, or reuse its cached parse.
 5. Resolve names across the snapshot.
 6. Bulk-load the graph with `COPY`.
+7. Discover pytest tests statically.
+
+The worker reports progress through these stages as `fetch`, `snapshot`, `parse`, `resolve`,
+`persist` and `tests` (`services/progress.py`). Stage changes are written at once; updates
+within a stage (files done, the file being read) at most every 0.75 s. `GET /analyses/{id}`
+returns the latest report as `progress`, and keeps it after the run ends: a `done` report
+with each stage's wall time, or, for a failed run, the stage it stopped in.
 
 **Change analysis** (`ANALYZE_CHANGE`)
 1. Resolve both refs. The fetch is skipped when both are full SHAs already mirrored.
@@ -137,3 +145,8 @@ Jobs live in PostgreSQL (`persistence/jobs.py`).
 - The proxy only forwards mutating requests that are same-origin JSON.
 - No business logic lives in the UI. It renders what the API returns, including unknowns
   and warnings.
+- The visual views draw only recorded data: the analysis pipeline from `progress` and
+  `timings_ms`, the module graph from `GET /analyses/{id}/modules` (laid out in the browser,
+  no layout library), the charts from `…/stats`, and the question trace from the fields of
+  the answer. The question endpoint reports no intermediate steps, so while it runs the
+  trace shows only the request itself. All of them respect `prefers-reduced-motion`.

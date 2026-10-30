@@ -8,6 +8,7 @@ import { Mark } from "@/components/Mark";
 import { InstanceNote, SiteNav } from "@/components/SiteNav";
 
 import "./globals.css";
+import "./visuals.css";
 
 const serif = Newsreader({
   subsets: ["latin"],

@@ -68,6 +68,26 @@ class AnalysisSummary(Schema):
     finished_at: datetime | None
 
 
+class AnalysisProgressOut(Schema):
+    """What the worker is doing right now; the last report stays after the run ends."""
+
+    stage: str = Field(description="One of `stages`, or `done` once results are committed")
+    stage_index: int = Field(description="Position of `stage` in `stages` (len(stages) = done)")
+    stage_count: int
+    stages: list[str]
+    files_done: int | None = Field(
+        default=None, description="Files handled so far in this stage (parse, snapshot)"
+    )
+    files_total: int | None = None
+    current: str | None = Field(default=None, description="File or item being processed")
+    detail: str | None = None
+    stage_started_at: datetime | None = None
+    durations_ms: dict[str, float] = Field(
+        default_factory=dict, description="Wall time of each stage finished so far"
+    )
+    updated_at: datetime
+
+
 class AnalysisOut(Schema):
     id: uuid.UUID
     repository_id: uuid.UUID
@@ -90,6 +110,7 @@ class AnalysisOut(Schema):
     finished_at: datetime | None
     snapshot: SnapshotOut | None
     job: JobOut | None
+    progress: AnalysisProgressOut | None = None
 
 
 class AnalysisPage(Schema):
