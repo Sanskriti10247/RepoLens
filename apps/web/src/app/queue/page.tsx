@@ -27,6 +27,7 @@ const KIND_NOTES: Record<string, string> = {
   ANALYZE_REPOSITORY: "Fetching a revision and parsing it into symbols and references.",
   ANALYZE_CHANGE: "Diffing two revisions and following the change through the graph.",
   RUN_TESTS: "Running selected tests, or pytest collection, inside the sandbox.",
+  FETCH_MIRROR: "Fetching a repository again after its local copy was lost, so its source can be shown.",
 };
 
 export default function QueuePage() {

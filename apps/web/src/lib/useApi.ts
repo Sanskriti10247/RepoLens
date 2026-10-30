@@ -8,6 +8,8 @@ export interface ApiState<T> {
   data: T | null;
   error: ApiError | null;
   loading: boolean;
+  /** Error code of a temporary failure being retried quietly (e.g. "source_fetching"). */
+  retrying: string | null;
   reload: () => void;
 }
 
@@ -33,6 +35,7 @@ interface Result<T> {
 export function useApi<T>(path: string | null, options: Options<T> = {}): ApiState<T> {
   const [tick, setTick] = useState(0);
   const [result, setResult] = useState<Result<T>>({ key: null, data: null, error: null });
+  const [retrying, setRetrying] = useState<{ key: string; code: string } | null>(null);
   const optionsRef = useRef(options);
   useEffect(() => {
     optionsRef.current = options;
@@ -50,6 +53,7 @@ export function useApi<T>(path: string | null, options: Options<T> = {}): ApiSta
         const data = await apiFetch<T>(path as string);
         if (cancelled) return;
         retries = 0;
+        setRetrying(null);
         setResult({ key, data, error: null });
         const { pollWhile, pollMs = 1500 } = optionsRef.current;
         if (pollWhile?.(data)) timer = setTimeout(load, pollMs);
@@ -61,6 +65,7 @@ export function useApi<T>(path: string | null, options: Options<T> = {}): ApiSta
             : new ApiError(0, "network_error", "Could not reach the API", null);
         if (WAKE_STATUSES.has(error.status) && retries < WAKE_RETRIES) {
           retries += 1;
+          setRetrying({ key: key as string, code: error.code });
           timer = setTimeout(load, WAKE_RETRY_MS);
           return;
         }
@@ -82,6 +87,7 @@ export function useApi<T>(path: string | null, options: Options<T> = {}): ApiSta
     data: samePath ? result.data : null,
     error: samePath ? result.error : null,
     loading: key !== null && result.key !== key,
+    retrying: retrying !== null && retrying.key === key ? retrying.code : null,
     reload,
   };
 }

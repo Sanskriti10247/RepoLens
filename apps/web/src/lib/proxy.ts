@@ -1,8 +1,10 @@
 /**
  * Server-side forwarding of `/api/*` to the RepoLens API.
  *
- * The API token lives only in the Next.js server environment and is attached here, so it
- * never reaches the browser. Because the proxy therefore acts with the operator's authority,
+ * Single-operator mode: the API token lives only in the Next.js server environment and is
+ * attached here, so it never reaches the browser. User mode (Supabase sign-in): the signed-in
+ * user's access token, read from the session cookie, is sent instead, on every request, and
+ * the static token never is. Because the proxy therefore acts with the operator's authority,
  * state-changing requests must be same-origin JSON requests (CSRF protection): cross-site
  * forms cannot send `application/json`, and the Origin check rejects cross-site fetches.
  */
@@ -15,6 +17,9 @@ const FORWARDED_RESPONSE_HEADERS = ["content-type", "x-request-id", "cache-contr
 export interface ProxyConfig {
   apiBaseUrl: string;
   apiToken: string | undefined;
+  /** Supabase sign-in is on: send `accessToken` (may be absent when signed out), never `apiToken`. */
+  userMode?: boolean;
+  accessToken?: string;
   /** Honour X-Forwarded-Host. Enable only behind a reverse proxy that sets it. */
   trustForwardedHost?: boolean;
 }
@@ -73,7 +78,8 @@ export async function forward(
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
-  if (mutating && config.apiToken) headers.set("authorization", `Bearer ${config.apiToken}`);
+  const bearer = config.userMode ? config.accessToken : mutating ? config.apiToken : undefined;
+  if (bearer) headers.set("authorization", `Bearer ${bearer}`);
 
   let upstream: Response;
   try {
@@ -89,7 +95,7 @@ export async function forward(
   }
   // The API's own 401 says "invalid bearer token", which a visitor cannot act on. The token
   // is this server's configuration, so say which side of it is wrong.
-  if (mutating && upstream.status === 401) {
+  if (mutating && upstream.status === 401 && !config.userMode) {
     return errorResponse(
       401,
       "web_token_mismatch",

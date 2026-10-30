@@ -143,6 +143,16 @@ function Explorer() {
   );
 }
 
+/** The mirror is fetched again after a restart wiped it; useApi keeps retrying meanwhile. */
+function SourceLoading({ retrying }: { retrying: string | null }) {
+  return (
+    <>
+      {retrying === "source_fetching" && <p className="muted small">Fetching the source again. This takes a moment.</p>}
+      <Loading what="Loading source" rows={10} />
+    </>
+  );
+}
+
 function kindIcon(kind: string): string {
   return { MODULE: "mod", CLASS: "cls", FUNCTION: "fn", ASYNC_FUNCTION: "afn", METHOD: "m", ASYNC_METHOD: "am" }[kind] ?? "?";
 }
@@ -151,7 +161,7 @@ function kindIcon(kind: string): string {
 function FilePanel({ repoId, fileId, line }: { repoId: string; fileId: string; line: number | null }) {
   const source = useApi<SourceFile>(`/repositories/${repoId}/files/${fileId}/source`);
   if (source.error) return <ErrorPanel error={source.error} title="Source unavailable" />;
-  if (!source.data) return <Loading what="Loading source" rows={10} />;
+  if (!source.data) return <SourceLoading retrying={source.retrying} />;
   const f = source.data;
   return (
     <Card
@@ -226,7 +236,7 @@ function SymbolPanel({
       <Card title="Source">
         {source.error && <ErrorPanel error={source.error} title="Source unavailable" />}
         {source.data && <SourceView content={source.data.content} highlight={{ start: s.start_line, end: lastLine }} />}
-        {!source.data && !source.error && <Loading what="Loading source" rows={10} />}
+        {!source.data && !source.error && <SourceLoading retrying={source.retrying} />}
       </Card>
       <div className="columns">
         <NeighbourList title={`Callers (${d.callers_total})`} items={d.callers} onSelect={onSelect} empty="No statically resolved callers." />

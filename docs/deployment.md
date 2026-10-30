@@ -81,7 +81,9 @@ and test plans fall back to the statically discovered tests. The worker never ca
 
 **Nothing is kept.** The database and mirrors live in the container's filesystem. Every
 restart, deploy, or wake-up from sleep goes back to the snapshot, and repositories visitors
-added are gone. Render free web services sleep after 15 minutes without traffic.
+added are gone. Render free web services sleep after 15 minutes without traffic. To keep
+data and give each visitor their own repositories, use
+[Sign-in with Supabase](#sign-in-with-supabase).
 
 The snapshot holds `mahmoud/boltons` at `5150802` with an impact report against `574393a`, a
 test plan (108 of 399 tests, confirmed with sandboxed collection) and a sandboxed run of
@@ -171,6 +173,76 @@ parse cache emptied, and stops if the dump contains this host's name, home direc
 API token. Questions are answered on request and not stored, so they are not part of the
 snapshot.
 
+## Sign-in with Supabase
+
+By default RepoLens has a single operator: whoever can open the web app acts with the API
+token. With Supabase, visitors sign in with Google, and each user sees and changes only the
+repositories they added. The database moves to Supabase Postgres, so it survives restarts.
+Git mirrors stay on the service's local disk; when one is missing (a free-tier restart wipes
+the disk), the worker fetches it again the first time someone needs the source, and the page
+shows "Fetching the source again" until it is back.
+
+Without `REPOLENS_SUPABASE_URL` on the API and the two `NEXT_PUBLIC_SUPABASE_*` variables on
+the web app, everything behaves as described above.
+
+1. **Create a project** at supabase.com. From Project Settings, note the project URL
+   (`https://<ref>.supabase.co`) and the anon (publishable) API key. The anon key is meant
+   for browsers; never use the service-role key here.
+2. **Google OAuth client.** In Google Cloud Console, APIs & Services, set up the OAuth
+   consent screen, then Credentials, Create credentials, OAuth client ID, type Web
+   application. Add one authorised redirect URI: `https://<ref>.supabase.co/auth/v1/callback`.
+   Copy the client ID and secret.
+3. **Enable the provider.** In Supabase, Authentication, Sign In / Providers, Google: turn
+   it on and paste the client ID and secret.
+4. **URL configuration.** In Authentication, URL Configuration, set the Site URL to the web
+   app (`https://<your-app>.vercel.app`) and add these redirect URLs:
+   - `http://localhost:3100/auth/callback`
+   - `https://<your-app>.vercel.app/auth/callback`
+
+   Supabase only sends visitors back to URLs on this list.
+5. **Database URL.** In Connect, copy the **Session pooler** string (port 5432). Change the
+   scheme to `postgresql+psycopg://` and add `?sslmode=require`:
+
+   ```
+   postgresql+psycopg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+   ```
+
+   Percent-encode special characters in the password. Do not use the Transaction pooler
+   (port 6543): it hands each transaction to a different server connection, which breaks
+   the prepared statements psycopg creates and the session state the job queue relies on.
+   The direct connection (`db.<ref>.supabase.co`) is IPv6-only on the free plan, which
+   Render cannot reach. The job queue's `FOR UPDATE SKIP LOCKED` claims and
+   transaction-scoped advisory locks work through the Session pooler unchanged.
+
+Environment variables:
+
+| Where | Variable | Value |
+|---|---|---|
+| Render (API and worker) | `REPOLENS_DATABASE_URL` | the Session pooler URL from step 5 |
+| Render | `REPOLENS_SUPABASE_URL` | `https://<ref>.supabase.co` |
+| Render, only for legacy projects | `REPOLENS_SUPABASE_JWT_SECRET` | the project's legacy JWT secret, if it still signs with HS256 |
+| Vercel (web) | `REPOLENS_API_URL` | `https://<your-service>.onrender.com`, as before |
+| Vercel | `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` |
+| Vercel | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon (publishable) key |
+
+`REPOLENS_API_TOKEN` is not used in this mode; remove it from both services. The
+`NEXT_PUBLIC_*` values are built into the web app, so redeploy on Vercel after setting them.
+
+With `REPOLENS_DATABASE_URL` set, the demo image skips its embedded PostgreSQL and the
+snapshot restore, and only runs `alembic upgrade head` against Supabase on each start. The
+database starts empty; the boltons demo data is not loaded into it.
+
+The API checks each request's token against the project's published keys
+(`/auth/v1/.well-known/jwks.json`, cached and fetched again when a new signing key appears):
+signature, issuer `https://<ref>.supabase.co/auth/v1`, audience `authenticated` and expiry.
+The web app keeps the Supabase session in a cookie and forwards the user's access token to
+the API from its server; the static token is never sent. Repositories registered before
+sign-in was turned on have no owner and stay hidden.
+
+To try it locally, put `REPOLENS_SUPABASE_URL` (and the Supabase `REPOLENS_DATABASE_URL`, or
+keep the local one) in `.env`, and the two `NEXT_PUBLIC_SUPABASE_*` values in
+`apps/web/.env.local`. The localhost redirect URL from step 4 covers `npm run dev`.
+
 ## The Docker socket
 
 The worker mounts `/var/run/docker.sock` so it can run `docker run` for each sandbox. Access
@@ -254,10 +326,10 @@ container would point the sandbox at the wrong host directory.
 
 ## TLS and authentication with Caddy
 
-RepoLens has no user accounts. The web proxy adds the API token to every same-origin
-mutation, so anyone who can open the web app acts as the operator: they can register
-repositories, queue analyses and sandboxed runs, and spend model credit if a provider is
-enabled. Always put authentication in front of it.
+Without [Supabase sign-in](#sign-in-with-supabase) RepoLens has no user accounts. The web
+proxy adds the API token to every same-origin mutation, so anyone who can open the web app
+acts as the operator: they can register repositories, queue analyses and sandboxed runs,
+and spend model credit if a provider is enabled. Always put authentication in front of it.
 
 The bundled Caddy service provides automatic HTTPS (Let's Encrypt) and basic auth:
 

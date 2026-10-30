@@ -8,9 +8,25 @@ This page covers conventions and the main workflow.
 
 ## Conventions
 
-- **Authentication.** Reads are open. Every mutating endpoint requires
-  `Authorization: Bearer $REPOLENS_API_TOKEN`. If no token is configured, mutations are
-  disabled.
+- **Authentication.** Two modes:
+  - Single operator (default). Reads are open. Every mutating endpoint requires
+    `Authorization: Bearer $REPOLENS_API_TOKEN`. If no token is configured, mutations are
+    disabled.
+  - Signed-in users, when `REPOLENS_SUPABASE_URL` is set. Every endpoint except
+    `/api/health` and `/api/ready` requires `Authorization: Bearer <Supabase access token>`,
+    reads included. The token's signature (from the project's JWKS), issuer, audience
+    (`authenticated`) and expiry are checked; a missing or invalid token gets `401` with
+    code `unauthorized`. The static `REPOLENS_API_TOKEN` is not accepted in this mode.
+- **Ownership (signed-in users).** A repository belongs to the user who registered it, and
+  so does everything under it: analyses, files, symbols, impact reports, test plans, test
+  runs, questions and jobs. Any id that belongs to another user, in the path, the query or
+  the request body, answers `404 not_found`, the same as an id that does not exist. Lists
+  (`/repositories`, `/jobs`, `/test-runs`) and `/metrics/queue` cover only the caller's
+  repositories. Two users can register the same URL; each gets their own repository.
+  Repositories registered before sign-in was turned on have no owner and are not shown.
+- **Source after a restart.** Git mirrors live on local disk. If a mirror is missing, the
+  source endpoint queues a `FETCH_MIRROR` job and answers `503` with code `source_fetching`;
+  retry after a few seconds.
 - **Errors** share one shape:
   `{"error": {"code": "...", "message": "...", "request_id": "...", "details": ...}}`.
   The code is stable and machine-readable, for example `impact_not_ready`,

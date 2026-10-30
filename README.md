@@ -119,10 +119,13 @@ flowchart LR
 The web app renders what the API returns and holds no business logic. Its server-side
 `/api/*` route forwards requests to the API and attaches the API token, so the token never
 reaches the browser, and it forwards a mutation only if it is a same-origin JSON request.
+With Supabase sign-in turned on it forwards the signed-in user's access token instead, and
+each user sees only their own repositories ([deployment](docs/deployment.md#sign-in-with-supabase)).
 
 The API validates requests, writes rows and enqueues jobs. Test planning and questions touch
 only the database (and the local mirrors, for source snippets), so they run synchronously in
-the API. The API never fetches from the network and never runs Docker.
+the API. The API never fetches repositories from the network (with sign-in on, it loads only
+Supabase's public signing keys) and never runs Docker.
 
 PostgreSQL holds all results and the job queue. Workers claim jobs with
 `SELECT … FOR UPDATE SKIP LOCKED`, hold leases with heartbeats, and write results only while

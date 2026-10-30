@@ -8,6 +8,7 @@ import { ApiStatus } from "@/components/ApiStatus";
 import { Mark } from "@/components/Mark";
 import { InstanceNote, SiteNav } from "@/components/SiteNav";
 import { THEME_SCRIPT, ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 
 import "./globals.css";
 import "./visuals.css";
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="masthead-end">
               <ApiStatus />
               <ThemeToggle />
+              <UserMenu />
             </div>
           </div>
         </header>
