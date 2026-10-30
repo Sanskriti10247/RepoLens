@@ -233,7 +233,7 @@ type ScenarioId = "analysis" | "change" | "questions";
 const SCENARIOS: Record<ScenarioId, { title: string; lede: string; nodes: NodeId[]; edges: EdgeId[] }> = {
   analysis: {
     title: "Analyze a repository",
-    lede: "Register a repository: the API enqueues a job, a worker fetches the mirror, parses every Python file and writes the code graph.",
+    lede: "Register a repository: the API enqueues a job, a worker fetches the mirror, parses every supported source file and writes the code graph.",
     nodes: ["web", "api", "pg", "worker", "github", "mirror", "parse", "graph"],
     edges: ["web-api", "api-pg", "pg-worker", "github-mirror", "worker-mirror", "mirror-parse", "parse-graph", "graph-pg"],
   },
