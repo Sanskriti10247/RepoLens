@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8100, ge=1, le=65535)
     # Bearer token required for mutating endpoints. None disables them entirely.
     api_token: SecretStr | None = None
+    # User sign-in (Supabase Auth). When set, every route except health/ready needs a user's
+    # access token and each user sees only the repositories they added. Unset: single
+    # operator with api_token, as before.
+    supabase_url: str | None = None
+    # Only for projects still signing tokens with the legacy shared HS256 secret.
+    supabase_jwt_secret: SecretStr | None = None
     # Showcase mode: every mutating endpoint answers 403 and nothing needs a worker or Docker.
     read_only: bool = False
     cors_origins: list[str] = ["http://127.0.0.1:3100", "http://localhost:3100"]
@@ -82,6 +88,10 @@ class Settings(BaseSettings):
     llm_allow_source_upload: bool = False
     llm_max_evidence_chars: int = Field(default=40_000, ge=1000)
     llm_min_interval_seconds: float = Field(default=1.0, ge=0)
+
+    @property
+    def user_auth(self) -> bool:
+        return bool(self.supabase_url)
 
     @property
     def mirrors_dir(self) -> Path:

@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine
 
 import repolens
-from repolens.api.dependencies import reject_writes_when_read_only
+from repolens.api.auth import TokenVerifier
+from repolens.api.dependencies import Owned, reject_writes_when_read_only
 from repolens.api.errors import install_error_handlers
 from repolens.api.middleware import request_context
 from repolens.api.routes import (
@@ -65,6 +66,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.state.source_reader = SourceReader(MirrorStore(settings.mirrors_dir, reader_runner))
     app.state.question_service = QuestionService(app.state.source_reader)
     app.state.answer_provider = build_answer_provider(settings)
+    if settings.supabase_url:
+        secret = settings.supabase_jwt_secret
+        app.state.token_verifier = TokenVerifier(
+            settings.supabase_url, secret.get_secret_value() if secret else None
+        )
 
     app.middleware("http")(request_context)
     app.add_middleware(
@@ -76,14 +82,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     )
     install_error_handlers(app)
     app.include_router(health.router, prefix="/api")
-    app.include_router(repositories.router, prefix="/api")
-    app.include_router(analyses.router, prefix="/api")
-    app.include_router(graph.router, prefix="/api")
-    app.include_router(impact.router, prefix="/api")
-    app.include_router(test_plans.router, prefix="/api")
-    app.include_router(test_runs.router, prefix="/api")
-    app.include_router(jobs.router, prefix="/api")
-    app.include_router(questions.router, prefix="/api")
+    # Everything but health and readiness needs the signed-in owner in user mode.
+    for module in (
+        repositories,
+        analyses,
+        graph,
+        impact,
+        test_plans,
+        test_runs,
+        jobs,
+        questions,
+    ):
+        app.include_router(module.router, prefix="/api", dependencies=[Owned])
     return app
 
 

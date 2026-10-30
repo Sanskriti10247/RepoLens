@@ -16,6 +16,7 @@ dependencies = [
     "tree-sitter>=0.25.2,<0.26",  # 0.26.0 segfaults on CPython 3.14 (see parsers/python.py)
     "tree-sitter-python>=0.25",
     "tree-sitter-language-pack==0.13.0",
+    "pyjwt[crypto]==2.15.1",
 ]
 
 [project.scripts]
