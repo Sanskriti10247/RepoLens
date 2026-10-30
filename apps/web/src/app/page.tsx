@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { SystemDiagram } from "@/components/SystemDiagram";
 import { Badge, Card, Empty, ErrorPanel, Loading, ReadOnlyNotice, When } from "@/components/ui";
 import { ApiError, postJson } from "@/lib/api";
 import { TERMINAL_ANALYSIS, label, repoSlug, shortSha } from "@/lib/format";
@@ -84,6 +85,9 @@ export default function RepositoriesPage() {
             </tbody>
           </table>
         )}
+      </Card>
+      <Card title="How RepoLens works">
+        <SystemDiagram />
       </Card>
     </>
   );
