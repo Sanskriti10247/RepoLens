@@ -33,7 +33,7 @@ from repolens.persistence.models import (
     SymbolReference,
     TestRun,
 )
-from repolens.services.errors import InvalidInput, NotFound
+from repolens.services.errors import InvalidInput, NotFound, Unavailable
 from repolens.services.graph import RunContext, SourceReader
 
 MAX_QUESTION = 1000
@@ -352,7 +352,7 @@ class QuestionService:
     def _snippet(self, session: Session, ctx: RunContext, symbol: q.SymbolRow) -> str | None:
         try:
             _, content = self.source_reader.read(session, ctx, symbol.file_id)
-        except (NotFound, InvalidInput):
+        except (NotFound, InvalidInput, Unavailable):
             return None
         lines = content.splitlines()
         first = symbol.start_line - 1

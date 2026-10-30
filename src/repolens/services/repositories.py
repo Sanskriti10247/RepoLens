@@ -24,9 +24,12 @@ class Page[T]:
 
 
 def register_repository(
-    session: Session, providers: list[RepositoryProvider], url: str
+    session: Session,
+    providers: list[RepositoryProvider],
+    url: str,
+    owner_id: uuid.UUID | None = None,
 ) -> tuple[Repository, bool]:
-    """Register a repository by URL. Idempotent on the canonical URL.
+    """Register a repository by URL. Idempotent on the owner and canonical URL.
 
     Only validates the URL; nothing is fetched here (fetching happens in the worker).
     """
@@ -43,12 +46,16 @@ def register_repository(
             owner=locator.owner,
             name=locator.name,
             canonical_url=locator.canonical_url,
+            owner_id=owner_id,
         )
-        .on_conflict_do_nothing(index_elements=["canonical_url"])
+        .on_conflict_do_nothing(index_elements=["owner_id", "canonical_url"])
         .returning(Repository.id)
     ).scalar_one_or_none()
     repo = session.execute(
-        select(Repository).where(Repository.canonical_url == locator.canonical_url)
+        select(Repository).where(
+            Repository.canonical_url == locator.canonical_url,
+            Repository.owner_id.is_not_distinct_from(owner_id),
+        )
     ).scalar_one()
     return repo, inserted is not None
 
@@ -60,14 +67,17 @@ def get_repository(session: Session, repository_id: uuid.UUID) -> Repository:
     return repo
 
 
-def list_repositories(session: Session, *, limit: int, offset: int) -> Page[Repository]:
-    total = session.execute(select(func.count()).select_from(Repository)).scalar_one()
+def list_repositories(
+    session: Session, *, limit: int, offset: int, owner_id: uuid.UUID | None = None
+) -> Page[Repository]:
+    """All repositories, or only ``owner_id``'s in user mode."""
+    stmt = select(Repository)
+    if owner_id is not None:
+        stmt = stmt.where(Repository.owner_id == owner_id)
+    total = session.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     items = (
         session.execute(
-            select(Repository)
-            .order_by(Repository.created_at.desc(), Repository.id)
-            .limit(limit)
-            .offset(offset)
+            stmt.order_by(Repository.created_at.desc(), Repository.id).limit(limit).offset(offset)
         )
         .scalars()
         .all()

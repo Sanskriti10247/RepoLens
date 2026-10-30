@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Request, Response, status
 
-from repolens.api.dependencies import Authorized, SessionDep, SettingsDep
+from repolens.api.dependencies import Authorized, SessionDep, SettingsDep, UserDep
 from repolens.api.pagination import Pagination
 from repolens.api.schemas import (
     AnalysisCreate,
@@ -38,12 +38,16 @@ def _repository_out(repo: object, latest: AnalysisSummary | None) -> RepositoryO
     responses={200: {"model": RepositoryOut, "description": "Already registered"}},
 )
 def register_repository(
-    body: RepositoryCreate, request: Request, response: Response, session: SessionDep
+    body: RepositoryCreate,
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    user: UserDep,
 ) -> RepositoryOut:
     """Register a repository by URL. Validates the URL only; nothing is fetched yet."""
     with session.begin():
         repo, created = repo_service.register_repository(
-            session, request.app.state.providers, body.url
+            session, request.app.state.providers, body.url, owner_id=user
         )
     if not created:
         response.status_code = status.HTTP_200_OK
@@ -51,8 +55,10 @@ def register_repository(
 
 
 @router.get("", response_model=RepositoryPage)
-def list_repositories(session: SessionDep, page: Pagination) -> RepositoryPage:
-    result = repo_service.list_repositories(session, limit=page.limit, offset=page.offset)
+def list_repositories(session: SessionDep, page: Pagination, user: UserDep) -> RepositoryPage:
+    result = repo_service.list_repositories(
+        session, limit=page.limit, offset=page.offset, owner_id=user
+    )
     latest = analysis_views.latest_analyses(session, [r.id for r in result.items])
     items = [
         _repository_out(r, analysis_summary(*latest[r.id]) if r.id in latest else None)

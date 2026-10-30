@@ -6,13 +6,14 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, select, true
 
-from repolens.api.dependencies import SessionDep
+from repolens.api.dependencies import SessionDep, UserDep
 from repolens.api.pagination import Pagination
 from repolens.api.schemas import JobDetailOut, JobPage, KindMetrics, PageMeta, QueueMetrics
 from repolens.domain.enums import JobKind
 from repolens.persistence.models import Job
+from repolens.services import ownership
 from repolens.services.errors import NotFound
 
 router = APIRouter(tags=["jobs"])
@@ -22,11 +23,12 @@ router = APIRouter(tags=["jobs"])
 def list_jobs(
     session: SessionDep,
     page: Pagination,
+    user: UserDep,
     status: str | None = None,
     kind: str | None = None,
     repository_id: uuid.UUID | None = None,
 ) -> JobPage:
-    stmt = select(Job)
+    stmt = select(Job).where(_visible(user))
     if status:
         stmt = stmt.where(Job.status == status)
     if kind:
@@ -51,22 +53,35 @@ def get_job(job_id: uuid.UUID, session: SessionDep) -> JobDetailOut:
     return JobDetailOut.model_validate(job)
 
 
+def _visible(user: uuid.UUID | None) -> ColumnElement[bool]:
+    """All jobs for the operator; in user mode only jobs of the user's repositories."""
+    if user is None:
+        return true()
+    return Job.repository_id.in_(ownership.owned_repository_ids(user))
+
+
 def _ms(expr: ColumnElement[Any]) -> ColumnElement[Any]:
     return func.extract("epoch", expr) * 1000
 
 
 @router.get("/metrics/queue", response_model=QueueMetrics)
-def queue_metrics(session: SessionDep) -> QueueMetrics:
-    """Queue health from the jobs table: wait and run times are over the last 24 hours."""
+def queue_metrics(session: SessionDep, user: UserDep) -> QueueMetrics:
+    """Queue health from the jobs table: wait and run times are over the last 24 hours.
+
+    In user mode the figures cover only the signed-in user's jobs.
+    """
+    visible = _visible(user)
     since = func.now() - func.make_interval(0, 0, 0, 1)
     kinds: list[KindMetrics] = []
     for kind in JobKind:
         by_status = dict(
             session.execute(
-                select(Job.status, func.count()).where(Job.kind == kind.value).group_by(Job.status)
+                select(Job.status, func.count())
+                .where(visible, Job.kind == kind.value)
+                .group_by(Job.status)
             ).all()
         )
-        recent = (Job.kind == kind.value) & (Job.finished_at >= since)
+        recent = visible & (Job.kind == kind.value) & (Job.finished_at >= since)
         wait = _ms(Job.claimed_at - Job.created_at)
         run = _ms(Job.finished_at - Job.started_at)
         stats = session.execute(
@@ -99,7 +114,7 @@ def queue_metrics(session: SessionDep) -> QueueMetrics:
                 failure_categories={str(k): int(v) for k, v in failures.items()},
             )
         )
-    active = Job.status.in_(["CLAIMED", "RUNNING"])
+    active = visible & Job.status.in_(["CLAIMED", "RUNNING"])
     active_leases = session.execute(select(func.count()).where(active)).scalar_one()
     expired = session.execute(
         select(func.count()).where(active, Job.lease_expires_at < func.now())

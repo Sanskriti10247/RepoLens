@@ -201,6 +201,21 @@ def request_analysis(
     return AnalysisRequestResult(run=existing, job_id=job_id, created=False)
 
 
+def request_mirror_fetch(session: Session, repository_id: uuid.UUID) -> uuid.UUID:
+    """Queue a fetch of a repository's mirror (e.g. after the disk was wiped by a restart).
+
+    Uses its own transaction so callers inside read-only requests need not commit.
+    """
+    with Session(session.get_bind()) as own, own.begin():
+        job_id, _ = queue.enqueue(
+            own,
+            JobKind.FETCH_MIRROR,
+            repository_id=repository_id,
+            idempotency_key=f"fetch-mirror:{repository_id}",
+        )
+    return job_id
+
+
 def cancel_analysis(session: Session, run_id: uuid.UUID) -> AnalysisRun:
     run = session.get(AnalysisRun, run_id)
     if run is None:
@@ -340,6 +355,28 @@ class AnalyzeRepositoryHandler:
             timings=timings,
             progress=progress,
         )
+
+
+class FetchMirrorHandler:
+    """Re-creates a missing mirror so the API can read source from it again."""
+
+    timeout: timedelta | None = timedelta(minutes=10)
+
+    def __init__(self, deps: IngestionDeps) -> None:
+        self.pipeline = AnalysisPipeline(deps)
+
+    def on_terminal_failure(self, *_: object) -> None:
+        return None  # no subject to update
+
+    def run(self, ctx: JobContext) -> dict[str, Any]:
+        repo_id = ctx.job.repository_id
+        with transaction(ctx.session_factory) as session:
+            repo = session.get(Repository, repo_id) if repo_id else None
+            if repo is None:
+                raise PermanentJobError("Repository not found", category="invalid_job")
+            provider, url = repo.provider, repo.canonical_url
+        self.pipeline.prepare_mirror(ctx, repo.id, provider, url)
+        return {"fetched": True}
 
 
 class AnalysisPipeline:

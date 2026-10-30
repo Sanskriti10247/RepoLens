@@ -82,13 +82,19 @@ JOB_NOT_TERMINAL_SQL = "status IN ('QUEUED', 'CLAIMED', 'RUNNING')"
 
 class Repository(Base):
     __tablename__ = "repositories"
+    __table_args__ = (
+        # One registration per URL and owner; NULL (operator mode) counts as one owner.
+        UniqueConstraint("owner_id", "canonical_url", postgresql_nulls_not_distinct=True),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
+    # Signed-in user (Supabase ``sub``) who added it; NULL in single-operator mode.
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     provider: Mapped[str] = mapped_column(Text, nullable=False)
     host: Mapped[str] = mapped_column(Text, nullable=False)
     owner: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    canonical_url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
     default_branch: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = mapped_column(

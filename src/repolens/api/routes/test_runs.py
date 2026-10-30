@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, status
 from sqlalchemy import func, literal, select
 
-from repolens.api.dependencies import Authorized, SessionDep, SettingsDep
+from repolens.api.dependencies import Authorized, SessionDep, SettingsDep, UserDep
 from repolens.api.pagination import Pagination
 from repolens.api.schemas import (
     CoverageFileOut,
@@ -22,7 +22,7 @@ from repolens.api.schemas import (
     TestRunPage,
 )
 from repolens.persistence.models import CoverageRecord, Job, TestResultRecord, TestRun
-from repolens.services import execution
+from repolens.services import execution, ownership
 from repolens.services.errors import NotFound
 
 router = APIRouter(tags=["test execution"])
@@ -67,9 +67,11 @@ def create_test_run(body: TestRunCreate, session: SessionDep, settings: Settings
 
 @router.get("/test-runs", response_model=TestRunPage)
 def list_test_runs(
-    session: SessionDep, page: Pagination, repository_id: uuid.UUID | None = None
+    session: SessionDep, page: Pagination, user: UserDep, repository_id: uuid.UUID | None = None
 ) -> TestRunPage:
     stmt = select(TestRun)
+    if user is not None:
+        stmt = stmt.where(TestRun.repository_id.in_(ownership.owned_repository_ids(user)))
     if repository_id is not None:
         stmt = stmt.where(TestRun.repository_id == repository_id)
     total = session.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
