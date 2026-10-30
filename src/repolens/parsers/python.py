@@ -33,13 +33,30 @@ from repolens.parsers.base import (
 )
 
 # Bump when extraction logic changes in a way that alters output for the same input.
-EXTRACTOR_REVISION = "2"
+EXTRACTOR_REVISION = "3"
 MAX_PROBLEMS = 50
 MAX_TEXT = 200
 DYNAMIC_CALLS = frozenset(
     {"getattr", "setattr", "delattr", "__import__", "eval", "exec", "import_module", "globals"}
 )
 _CODING_COOKIE = re.compile(rb"^[ \t\f]*#.*?coding[:=][ \t]*([-\w.]+)")
+# Cyclomatic complexity (docs/insights.md): each of these nodes adds one path.
+_DECISION_NODES = frozenset(
+    {
+        "if_statement",
+        "elif_clause",
+        "for_statement",
+        "while_statement",
+        "except_clause",
+        "boolean_operator",  # binary in the grammar: ``a and b or c`` is two nodes
+        "conditional_expression",
+        "for_in_clause",  # each ``for`` of a comprehension
+        "if_clause",  # comprehension filters and ``case`` guards
+    }
+)
+_COLLECTIONS = frozenset({"list", "tuple", "set", "dictionary"})
+_ELSE_PARENTS = frozenset({"for_statement", "while_statement", "try_statement"})
+_NESTED_SCOPES = frozenset({"function_definition", "class_definition", "decorated_definition"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +199,8 @@ class _Extractor:
         self.result = ParsedFile(path=path, module=module, language="python")
         self._ordinals: Counter[str] = Counter()
         self._problem_lines: list[tuple[int, int]] = []
+        # Byte ranges of ``if TYPE_CHECKING:`` bodies (imports there never run).
+        self._type_checking: list[tuple[int, int]] = []
 
     # -- entry point -----------------------------------------------------------------------
 
@@ -225,6 +244,8 @@ class _Extractor:
             if kind in ("import_statement", "import_from_statement", "future_import_statement"):
                 self._imports(node, current)
                 continue
+            if kind == "if_statement":
+                self._note_type_checking_block(node)
             if kind == "call":
                 self._call(node, current)
             elif kind in ("argument_list", "return_statement", "assignment", "keyword_argument"):
@@ -324,6 +345,11 @@ class _Extractor:
         if bases is not None:
             for base in bases.named_children:
                 if base.type == "keyword_argument":
+                    value = base.child_by_field_name("value")
+                    if _text(self.source, base.child_by_field_name("name")) == "metaclass":
+                        target = dotted_target(self.source, value)
+                        if value is not None and target:
+                            self._reference(ReferenceKind.NAME, child, value, target)
                     continue
                 self._reference(
                     ReferenceKind.INHERIT, child, base, dotted_target(self.source, base)
@@ -373,6 +399,7 @@ class _Extractor:
                 doc_summary=self._docstring(definition.child_by_field_name("body")),
                 is_test=is_test,
                 has_parse_errors=self._overlaps_problem(outer),
+                complexity=cyclomatic_complexity(self.source, definition),
             )
         )
         return _Scope(key, qualname, kind)
@@ -414,6 +441,16 @@ class _Extractor:
             target = f"{source_module}.{imported}" if source_module else imported
             self._reference(ReferenceKind.IMPORT, scope, node, target, detail)
 
+    def _note_type_checking_block(self, node: ts.Node) -> None:
+        condition = node.child_by_field_name("condition")
+        body = node.child_by_field_name("consequence")
+        target = dotted_target(self.source, condition)
+        if body is not None and target is not None and target.rsplit(".", 1)[-1] == "TYPE_CHECKING":
+            self._type_checking.append((body.start_byte, body.end_byte))
+
+    def _in_type_checking(self, node: ts.Node) -> bool:
+        return any(start <= node.start_byte < end for start, end in self._type_checking)
+
     def _import_name(self, node: ts.Node) -> tuple[str, str | None]:
         if node.type == "aliased_import":
             name = _text(self.source, node.child_by_field_name("name"))
@@ -431,7 +468,11 @@ class _Extractor:
     def _name_references(self, node: ts.Node, scope: _Scope) -> None:
         """Function/class objects passed around (callbacks, registries, returned values)."""
         if node.type == "argument_list":
-            candidates = [c for c in node.named_children if c.type in ("identifier", "attribute")]
+            candidates = [
+                c
+                for c in node.named_children
+                if c.type in ("identifier", "attribute") or c.type in _COLLECTIONS
+            ]
         elif node.type == "keyword_argument":
             value = node.child_by_field_name("value")
             candidates = [value] if value is not None else []
@@ -440,6 +481,20 @@ class _Extractor:
             candidates = [right] if right is not None else []
         else:
             candidates = list(node.named_children)
+        # One level into literal collections: dispatch tables such as ``{"a": handle_a}``.
+        for candidate in list(candidates):
+            if candidate.type == "dictionary":
+                for pair in candidate.named_children:
+                    candidates.extend(
+                        part
+                        for part in (
+                            pair.child_by_field_name("key"),
+                            pair.child_by_field_name("value"),
+                        )
+                        if part is not None
+                    )
+            elif candidate.type in _COLLECTIONS:
+                candidates.extend(candidate.named_children)
         for candidate in candidates:
             if candidate.type in ("identifier", "attribute"):
                 target = dotted_target(self.source, candidate)
@@ -465,6 +520,7 @@ class _Extractor:
                 target=target,
                 import_detail=detail,
                 dynamic=dynamic,
+                type_checking=kind is ReferenceKind.IMPORT and self._in_type_checking(node),
             )
         )
 
@@ -535,6 +591,40 @@ class _Extractor:
                     self.result.exported_names = _string_list(
                         self.source, assignment.child_by_field_name("right")
                     )
+
+
+def cyclomatic_complexity(src: bytes, definition: ts.Node) -> int:
+    """McCabe complexity of one function: 1 + its decision points.
+
+    Only the function's own body counts. Nested functions and classes are measured as
+    symbols of their own; lambdas are not symbols, so their branches count here.
+    """
+    body = definition.child_by_field_name("body")
+    if body is None:
+        return 1
+    count = 1
+    stack = [body]
+    while stack:
+        node = stack.pop()
+        kind = node.type
+        if kind in _NESTED_SCOPES:
+            continue
+        if kind in _DECISION_NODES:
+            count += 1
+        elif kind == "else_clause":
+            parent = node.parent
+            if parent is not None and parent.type in _ELSE_PARENTS:
+                count += 1  # ``for``/``while``/``try`` … ``else`` is a separate path
+        elif kind == "case_clause" and not _is_wildcard_case(src, node):
+            count += 1
+        stack.extend(node.children)
+    return count
+
+
+def _is_wildcard_case(src: bytes, node: ts.Node) -> bool:
+    """``case _:`` without a guard always matches, so it adds no path."""
+    patterns = [c for c in node.named_children if c.type == "case_pattern"]
+    return len(patterns) == 1 and _text(src, patterns[0]).strip() == "_"
 
 
 def name_node_end(definition: ts.Node) -> int:

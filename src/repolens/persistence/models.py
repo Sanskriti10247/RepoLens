@@ -271,6 +271,9 @@ class Symbol(Base):
     doc_summary: Mapped[str | None] = mapped_column(Text)
     is_test: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
     has_parse_errors: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    # Cyclomatic complexity of functions and methods; NULL for other kinds and for runs
+    # parsed before it was measured.
+    complexity: Mapped[int | None] = mapped_column(Integer)
 
 
 class SymbolReference(Base):
@@ -312,6 +315,8 @@ class SymbolReference(Base):
     external_target: Mapped[str | None] = mapped_column(Text)
     candidates: Mapped[list[str] | None] = mapped_column(JSONB)
     resolver_rule: Mapped[str | None] = mapped_column(Text)
+    # Import inside ``if TYPE_CHECKING:``; NULL for runs parsed before it was recorded.
+    type_checking: Mapped[bool | None] = mapped_column()
 
 
 class DependencyEdge(Base):

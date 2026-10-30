@@ -52,12 +52,12 @@ class WarningRecord:
 _SYMBOL_COLUMNS = (
     "id, analysis_run_id, file_id, parent_id, symbol_key, qualified_name, name, kind, "
     "visibility, start_line, start_col, end_line, end_col, signature, body_fingerprint, "
-    "decorators, doc_summary, is_test, has_parse_errors"
+    "decorators, doc_summary, is_test, has_parse_errors, complexity"
 )
 _REFERENCE_COLUMNS = (
     "id, analysis_run_id, file_id, source_symbol_id, ref_kind, raw_text, start_line, "
     "start_col, end_line, end_col, resolution_status, target_symbol_id, external_target, "
-    "candidates, resolver_rule"
+    "candidates, resolver_rule, type_checking"
 )
 _EDGE_COLUMNS = (
     "analysis_run_id, src_symbol_id, dst_symbol_id, edge_type, provenance, confidence, "
@@ -131,6 +131,7 @@ def write_symbols(
                 s.doc_summary,
                 s.is_test,
                 s.has_parse_errors,
+                s.complexity,
             )
             for file_id, s in symbols
         ),
@@ -179,6 +180,7 @@ def write_references(
                 res.external,
                 _json(list(res.candidates) or None),
                 res.rule,
+                ref.type_checking,
             )
         )
     copy_rows(session, "symbol_references", _REFERENCE_COLUMNS, rows)

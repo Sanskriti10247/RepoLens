@@ -29,6 +29,7 @@ class ExtractedSymbol:
     doc_summary: str | None = None
     is_test: bool = False
     has_parse_errors: bool = False
+    complexity: int | None = None  # cyclomatic complexity; functions and methods only
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,7 @@ class RawReference:
     target: str | None = None  # dotted name if statically expressible ("a.b.c", "self.m")
     import_detail: ImportDetail | None = None
     dynamic: bool = False  # getattr/importlib/eval-style indirection
+    type_checking: bool = False  # an import inside ``if TYPE_CHECKING:`` (never runs)
 
 
 @dataclass(frozen=True, slots=True)

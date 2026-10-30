@@ -394,3 +394,56 @@ def test_fingerprint_ignores_the_definition_name() -> None:
 
     assert fingerprint(first) == fingerprint(renamed)
     assert fingerprint(first) != fingerprint(changed)
+
+
+def test_imports_under_type_checking_are_flagged() -> None:
+    parsed = parse(
+        """
+        import typing as t
+        from typing import TYPE_CHECKING
+
+        if t.TYPE_CHECKING:
+            from .core import Context
+        if TYPE_CHECKING:
+            import pkg.other
+        else:
+            import pkg.runtime
+
+        def f():
+            from .lazy import thing
+        """
+    )
+    flags = {r.target: r.type_checking for r in parsed.references if r.kind is ReferenceKind.IMPORT}
+    assert flags == {
+        "typing": False,
+        "typing.TYPE_CHECKING": False,
+        "core.Context": True,
+        "pkg.other": True,
+        "pkg.runtime": False,  # the else branch runs
+        "lazy.thing": False,
+    }
+
+
+def test_collection_literals_and_metaclass_are_name_references() -> None:
+    parsed = parse(
+        """
+        HANDLERS = {"a": handle_a, handle_key: 1}
+        ORDER = [first, (second,)]
+
+        def pick():
+            return {"x": chosen}
+
+        register([plugin])
+
+        class Thing(Base, metaclass=Meta):
+            pass
+        """
+    )
+    assert refs(parsed, ReferenceKind.NAME) == [
+        ("pkg.mod#MODULE", "handle_a"),
+        ("pkg.mod#MODULE", "handle_key"),
+        ("pkg.mod#MODULE", "first"),
+        ("pkg.mod.pick#FUNCTION", "chosen"),
+        ("pkg.mod#MODULE", "plugin"),
+        ("pkg.mod.Thing#CLASS", "Meta"),
+    ]

@@ -14,7 +14,7 @@ from repolens.parsers.base import (
     RawReference,
 )
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
 
 def _span(span: Span) -> list[int]:
@@ -42,6 +42,7 @@ def to_json(parsed: ParsedFile) -> dict[str, Any]:
                 s.doc_summary,
                 s.is_test,
                 s.has_parse_errors,
+                s.complexity,
             ]
             for s in parsed.symbols
         ],
@@ -62,6 +63,7 @@ def to_json(parsed: ParsedFile) -> dict[str, Any]:
                     r.import_detail.is_star,
                 ],
                 r.dynamic,
+                r.type_checking,
             ]
             for r in parsed.references
         ],
@@ -93,6 +95,7 @@ def from_json(data: dict[str, Any]) -> ParsedFile:
                 doc_summary=s[10],
                 is_test=s[11],
                 has_parse_errors=s[12],
+                complexity=s[13],
             )
             for s in data["symbols"]
         ],
@@ -105,6 +108,7 @@ def from_json(data: dict[str, Any]) -> ParsedFile:
                 target=r[4],
                 import_detail=None if r[5] is None else ImportDetail(*r[5]),
                 dynamic=r[6],
+                type_checking=r[7],
             )
             for r in data["references"]
         ],
