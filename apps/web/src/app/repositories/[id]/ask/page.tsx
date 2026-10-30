@@ -57,7 +57,7 @@ export default function AskPage() {
 
   return (
     <>
-      <Card title="Ask about this repository">
+      <Card title="Ask about this repository" className="ask-card">
         {readOnly === true ? (
           <ReadOnlyNotice what="asking questions" />
         ) : (
@@ -127,7 +127,7 @@ function AnswerView({ answer }: { answer: QuestionAnswer }) {
         </p>
       </Card>
       {answer.evidence.length > 0 && (
-        <Card title={`Evidence (${answer.evidence.length})`}>
+        <Card title={<>Evidence <span className="count-chip num">{answer.evidence.length}</span></>}>
           <ol className="evidence">
             {answer.evidence.map((e) => (
               <EvidenceItem key={e.id} evidence={e} />

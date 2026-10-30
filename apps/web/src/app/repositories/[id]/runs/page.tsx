@@ -16,14 +16,14 @@ export default function RunsPage() {
     pollWhile: (page) => page.items.some((r) => r.status !== "COMPLETED"),
   });
   return (
-    <Card title="Test runs">
+    <Card title={runs.data ? <>Test runs <span className="count-chip num">{runs.data.page.total}</span></> : "Test runs"}>
       {sandbox === false && (
         <SandboxNotice>
           This instance has no Docker sandbox, so it cannot run tests. Runs recorded elsewhere still show up here.
         </SandboxNotice>
       )}
       {runs.error && <ErrorPanel error={runs.error} />}
-      {runs.loading && !runs.data && <Loading what="Loading runs" />}
+      {runs.loading && !runs.data && <Loading what="Loading runs" shape="table" />}
       {runs.data && runs.data.items.length === 0 && (
         <Empty>
           {sandbox === false
@@ -47,13 +47,16 @@ export default function RunsPage() {
             {runs.data.items.map((r) => (
               <tr key={r.id}>
                 <td>
-                  <Link href={`/test-runs/${r.id}`} className="row-title">
+                  <Link href={`/test-runs/${r.id}`} className="row-title row-link">
                     {label(r.mode)} run
+                    <span className="arrow" aria-hidden="true">
+                      →
+                    </span>
                   </Link>
                   <span className="row-sub mono">{shortSha(r.id)}</span>
                 </td>
                 <td>{r.outcome ? <Badge value={r.outcome} /> : <Badge value={r.status} />}</td>
-                <td className="right mono">
+                <td className="right mono nowrap">
                   {r.counts ? `${r.counts.passed ?? 0} / ${r.counts.total ?? 0}` : "—"}
                 </td>
                 <td className="hide-sm">

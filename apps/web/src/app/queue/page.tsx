@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, ErrorPanel, KeyValues, Loading, Stat, Stats, Tally } from "@/components/ui";
+import { Card, ErrorPanel, KeyValues, Loading, PageHead, Stat, Stats, Tally } from "@/components/ui";
 import { formatDuration, label } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 import { useCapabilities } from "@/lib/useReadOnly";
@@ -37,15 +37,17 @@ export default function QueuePage() {
   const { sandbox } = useCapabilities();
   return (
     <>
-      <div className="page-head">
-        <h1>Job queue</h1>
-        <p className="lede">
-          Work is queued in Postgres and picked up by a worker under a lease. If a worker dies, its lease expires
-          and the job is retried. Figures refresh every few seconds.
-        </p>
-      </div>
+      <PageHead
+        eyebrow={
+          <>
+            Instance <span className="live-dot" aria-hidden="true" /> live, every 5 s
+          </>
+        }
+        title="Job queue"
+        lede="Work is queued in Postgres and picked up by a worker under a lease. If a worker dies, its lease expires and the job is retried."
+      />
       {error && <ErrorPanel error={error} />}
-      {loading && !data && <Loading what="Loading queue figures" />}
+      {loading && !data && <Loading what="Loading queue figures" shape="stats" />}
       {data && (
         <>
           <Stats>
@@ -65,7 +67,7 @@ export default function QueuePage() {
                   {KIND_NOTES[k.kind] ?? ""}
                   {k.kind === "RUN_TESTS" && sandbox === false && " This instance has no sandbox, so none will run here."}
                 </p>
-                <div className="columns">
+                <div className="queue-kind">
                   <div>
                     <h3>By status</h3>
                     {statuses ? <Tally values={k.by_status} /> : <p className="muted">No jobs of this kind yet.</p>}

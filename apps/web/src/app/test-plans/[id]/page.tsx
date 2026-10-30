@@ -22,7 +22,7 @@ export default function TestPlanPage() {
   const [busy, setBusy] = useState(false);
   const { readOnly, sandbox } = useCapabilities();
   if (plan.error) return <ErrorPanel error={plan.error} />;
-  if (!plan.data) return <Loading what="Loading test plan" />;
+  if (!plan.data) return <Loading what="Loading test plan" shape="block" />;
   const p = plan.data;
   const selected = items.data?.items.filter((i) => i.selected) ?? [];
   const excluded = items.data?.items.filter((i) => !i.selected) ?? [];
@@ -114,12 +114,12 @@ export default function TestPlanPage() {
         />
         {error && <ErrorPanel error={error} title="Could not start the run" />}
       </Card>
-      <Card title={`Selected tests (${selected.length})`}>
-        {items.loading && !items.data && <Loading />}
+      <Card title={<>Selected tests <span className="count-chip num">{selected.length}</span></>}>
+        {items.loading && !items.data && <Loading what="Loading the selection" shape="table" />}
         {items.data && selected.length === 0 && <Empty>No test depends on the changed code.</Empty>}
         {selected.length > 0 && <PlanTable items={selected} />}
       </Card>
-      <Card title={`Not selected (${excluded.length})`}>
+      <Card title={<>Not selected <span className="count-chip num">{excluded.length}</span></>}>
         {excluded.length === 0 ? (
           <p className="muted">Every test was selected.</p>
         ) : (
@@ -142,7 +142,7 @@ export default function TestPlanPage() {
         )}
       </Card>
       {change.data && (
-        <p className="small">
+        <p className="small back-link">
           <Link href={`/impact/${p.change_set_id}`}>← Back to the impact report</Link>
         </p>
       )}
@@ -172,7 +172,10 @@ function PlanTable({ items }: { items: TestPlanItem[] }) {
               title="Show the evidence for this test"
             >
               <td className="mono right muted nowrap">{item.rank}</td>
-              <td className="mono">{item.node_id}</td>
+              <td className="mono">
+                <span className="chev" aria-hidden="true" />
+                {item.node_id}
+              </td>
               <td className="mono right">{item.score}</td>
               <td className="hide-sm">{item.evidence[0] && <EvidenceBadge evidence={item.evidence[0]} />}</td>
               <td className="mono right hide-sm">{item.estimated_seconds !== null ? formatDuration(item.estimated_seconds * 1000) : "—"}</td>
