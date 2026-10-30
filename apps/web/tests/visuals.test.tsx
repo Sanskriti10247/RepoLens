@@ -8,7 +8,7 @@ import { ModuleArchitecture, ModuleGraphView } from "@/components/ModuleGraph";
 import { RetrievalTrace, evidencePlaces } from "@/components/RetrievalTrace";
 import { SystemDiagram } from "@/components/SystemDiagram";
 import { ApiError } from "@/lib/api";
-import { autoGroups, components, groupGraph, grouper, layoutGraph } from "@/lib/moduleLayout";
+import { autoGroups, components, expandGroups, groupGraph, grouper, layoutGraph, neighbourhood, shortestPath } from "@/lib/moduleLayout";
 import type { Analysis, AnalysisProgress, ModuleGraph, QuestionAnswer, Stats } from "@/lib/types";
 import { resetReadOnlyCache } from "@/lib/useReadOnly";
 
@@ -243,6 +243,40 @@ describe("module layout", () => {
   });
 });
 
+describe("graph interaction helpers", () => {
+  const EDGES = [
+    { key: "a->b", src: "a", dst: "b" },
+    { key: "b->c", src: "b", dst: "c" },
+    { key: "c->d", src: "c", dst: "d" },
+    { key: "x->a", src: "x", dst: "a" },
+  ];
+
+  it("walks neighbours up to the given number of hops in both directions", () => {
+    expect([...neighbourhood("b", EDGES, 1).nodes].sort()).toEqual(["a", "b", "c"]);
+    const two = neighbourhood("b", EDGES, 2);
+    expect([...two.nodes].sort()).toEqual(["a", "b", "c", "d", "x"]);
+    expect(two.edges.has("x->a")).toBe(true);
+  });
+
+  it("finds the shortest directed path and nothing against the arrows", () => {
+    expect(shortestPath("x", "d", EDGES)).toEqual(["x->a", "a->b", "b->c", "c->d"]);
+    expect(shortestPath("d", "x", EDGES)).toBeNull();
+    expect(shortestPath("a", "a", EDGES)).toEqual([]);
+  });
+
+  it("opens a package one level and remembers where each piece came from", () => {
+    const { keyOf, parentOf } = expandGroups(GRAPH.modules, grouper(GRAPH.modules, 1), new Set(["shop"]));
+    expect(GRAPH.modules.map((m) => keyOf(m.name))).toEqual(["shop.cli", "shop.orders", "shop.pricing", "shop.tax"]);
+    expect(parentOf.get("shop.tax")).toBe("shop");
+    const folders = [
+      { id: 1, name: "pkg.a.x", path: "src/pkg/a/x.py" },
+      { id: 2, name: "pkg.b", path: "src/pkg/b.py" },
+    ];
+    const opened = expandGroups(folders, () => "src/", new Set(["src/", "src/pkg/"]));
+    expect(folders.map((m) => opened.keyOf(m.name))).toEqual(["src/pkg/a/", "pkg.b"]);
+  });
+});
+
 describe("ModuleGraphView", () => {
   it("draws nodes, highlights the cycle and opens details for a selected module", () => {
     render(<ModuleGraphView graph={GRAPH} repoId="r1" />);
@@ -268,9 +302,39 @@ describe("ModuleGraphView", () => {
     expect(container.querySelectorAll(".mg-edge")).toHaveLength(1);
   });
 
+  it("finds a module, traces a path to a second node and keeps the view in the address bar", () => {
+    window.history.replaceState(null, "", "/repositories/r1");
+    const { container } = render(<ModuleGraphView graph={GRAPH} repoId="r1" />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Find a module" }), { target: { value: "shop.cli" } });
+    fireEvent.submit(screen.getByRole("search"));
+    expect(screen.getByRole("button", { name: "shop.cli" })).toHaveClass("is-focus");
+    expect(new URLSearchParams(window.location.search).get("focus")).toBe("shop.cli");
+    fireEvent.click(screen.getByRole("button", { name: "shop.tax, in an import cycle" }), { shiftKey: true });
+    const route = screen.getByRole("list", { name: "Dependency path" });
+    expect(within(route).getAllByRole("button").map((b) => b.textContent)).toEqual(["shop.cli", "shop.orders", "shop.pricing", "shop.tax"]);
+    expect(container.querySelector('[data-key="shop.orders"]')).toHaveClass("is-path");
+    expect(new URLSearchParams(window.location.search).get("to")).toBe("shop.tax");
+    fireEvent.click(screen.getByRole("button", { name: "2 hops" }));
+    expect(new URLSearchParams(window.location.search).get("hops")).toBe("2");
+  });
+
+  it("restores a shared view and expands and collapses a package", () => {
+    window.history.replaceState(null, "", "/repositories/r1?group=1&focus=shop");
+    render(<ModuleGraphView graph={GRAPH} repoId="r1" />);
+    const details = screen.getByRole("complementary", { name: "Details for shop" });
+    fireEvent.click(within(details).getByRole("button", { name: "Expand" }));
+    expect(screen.getByRole("button", { name: "shop.orders" })).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get("open")).toBe("shop");
+    fireEvent.click(screen.getByRole("button", { name: "shop.orders" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse into shop" }));
+    expect(screen.queryByRole("button", { name: "shop.orders" })).toBeNull();
+    expect(screen.getByRole("button", { name: "shop, 4 modules, in an import cycle" })).toHaveClass("is-selected");
+    window.history.replaceState(null, "", "/");
+  });
+
   it("explains an analysis without modules", () => {
     render(<ModuleGraphView graph={{ ...GRAPH, modules: [], edges: [], import_cycles: [] }} repoId="r1" />);
-    expect(screen.getByText(/No Python modules were recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/No modules were recorded/)).toBeInTheDocument();
   });
 
   it("shows request errors", async () => {

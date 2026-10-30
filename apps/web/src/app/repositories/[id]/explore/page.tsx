@@ -1,11 +1,13 @@
 "use client";
 
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
+import { GraphCanvas } from "@/components/GraphCanvas";
 import { SourceView } from "@/components/SourceView";
-import { Badge, Card, Empty, ErrorPanel, KeyValues, Loading } from "@/components/ui";
+import { Badge, Card, ErrorPanel, KeyValues, Loading } from "@/components/ui";
 import { label, shortSha } from "@/lib/format";
+import { layoutGraph, neighbourhood, type GroupEdge, type PlacedEdge, type PlacedNode } from "@/lib/moduleLayout";
 import type { Neighbour, Reference, SourceFile, SymbolDetail, SymbolPage, SymbolSummary } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 
@@ -42,13 +44,18 @@ function Explorer() {
   if (testsOnly) search.set("is_test", "true");
   const results = useApi<SymbolPage>(`/repositories/${id}/symbols?${search}`);
 
-  function select(symbolId: number) {
+  function setParams(changes: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString());
-    next.set("symbol", String(symbolId));
-    next.delete("file");
-    next.delete("line");
+    for (const [name, value] of Object.entries(changes)) {
+      if (value === null) next.delete(name);
+      else next.set(name, value);
+    }
     if (query) next.set("q", query);
-    router.replace(`${pathname}?${next}`);
+    router.replace(`${pathname}?${next}`, { scroll: false });
+  }
+
+  function select(symbolId: number) {
+    setParams({ symbol: String(symbolId), file: null, line: null, to: null });
   }
 
   return (
@@ -115,16 +122,12 @@ function Explorer() {
       </aside>
       <section className="explorer-detail">
         {selected ? (
-          <SymbolPanel repoId={id} symbolId={selected} onSelect={select} />
+          <SymbolPanel repoId={id} symbolId={selected} onSelect={select} params={params} setParams={setParams} />
         ) : file ? (
           <FilePanel repoId={id} fileId={file} line={line} />
         ) : (
           <div className="explorer-intro">
-            <Empty>Pick a symbol to read its source and see who calls it, what it calls, and what it imports.</Empty>
-            <p className="hint">
-              Search matches short names and dotted paths alike, for example{" "}
-              <code className="inline-code">module.Class.method</code>.
-            </p>
+            <p className="muted">Pick a symbol to read its source, its callers and callees, and its dependency graph.</p>
             <ul className="kinds-key" aria-label="Symbol kinds">
               <li><b>mod</b>module</li>
               <li><b>cls</b>class</li>
@@ -171,10 +174,14 @@ function SymbolPanel({
   repoId,
   symbolId,
   onSelect,
+  params,
+  setParams,
 }: {
   repoId: string;
   symbolId: string;
   onSelect: (id: number) => void;
+  params: URLSearchParams;
+  setParams: (changes: Record<string, string | null>) => void;
 }) {
   const detail = useApi<SymbolDetail>(`/repositories/${repoId}/symbols/${symbolId}`);
   const fileId = detail.data?.symbol.file_id;
@@ -244,7 +251,7 @@ function SymbolPanel({
         </Card>
       )}
       <ReferencesCard references={d.references} counts={d.reference_counts} onSelect={onSelect} />
-      <Neighbourhood repoId={repoId} symbol={s} onSelect={onSelect} />
+      <Neighbourhood repoId={repoId} symbol={s} params={params} setParams={setParams} />
     </>
   );
 }
@@ -349,70 +356,181 @@ function ReferencesCard({
   );
 }
 
+interface GraphEdgeOut {
+  src: number;
+  dst: number;
+  edge_type: string;
+  confidence: string;
+}
+
 interface GraphResponse {
   nodes: { depth: number; symbol: SymbolSummary }[];
-  edges: { src: number; dst: number; edge_type: string; confidence: string }[];
+  edges: GraphEdgeOut[];
   truncated: boolean;
   truncation_reason: string | null;
+}
+
+interface PathResponse {
+  found: boolean;
+  edges: GraphEdgeOut[];
+  symbols: SymbolSummary[];
+}
+
+const DIRECTIONS: [string, string][] = [
+  ["IN", "Used by"],
+  ["OUT", "Uses"],
+  ["BOTH", "Both"],
+];
+
+/** The symbols and edges as a layered drawing: dependents above what they depend on. */
+function symbolLayout(symbols: SymbolSummary[], edges: GraphEdgeOut[]) {
+  const nodes = symbols.map((s) => ({
+    key: String(s.id),
+    label: s.qualified_name.split(".").slice(-2).join("."),
+    members: [],
+    inCycle: false,
+  }));
+  const merged = new Map<string, GroupEdge>();
+  for (const e of edges) {
+    const key = `${e.src}->${e.dst}`;
+    const edge = merged.get(key) ?? { key, src: String(e.src), dst: String(e.dst), weight: 0, types: [], cycle: false };
+    edge.weight += 1;
+    if (!edge.types.includes(e.edge_type)) edge.types.push(e.edge_type);
+    merged.set(key, edge);
+  }
+  return layoutGraph(nodes, [...merged.values()].filter((e) => e.src !== e.dst));
 }
 
 function Neighbourhood({
   repoId,
   symbol,
-  onSelect,
+  params,
+  setParams,
 }: {
   repoId: string;
   symbol: SymbolSummary;
-  onSelect: (id: number) => void;
+  params: URLSearchParams;
+  setParams: (changes: Record<string, string | null>) => void;
 }) {
-  const [direction, setDirection] = useState("IN");
-  const [depth, setDepth] = useState(2);
+  const direction = DIRECTIONS.some(([d]) => d === params.get("dir")) ? params.get("dir")! : "IN";
+  const depth = [1, 2, 3].includes(Number(params.get("depth"))) ? Number(params.get("depth")) : 2;
+  const to = params.get("to");
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [target, setTarget] = useState("");
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(target.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [target]);
   const graph = useApi<GraphResponse>(
-    `/repositories/${repoId}/graph?symbol_id=${symbol.id}&direction=${direction}&depth=${depth}&max_nodes=150`,
+    to ? null : `/repositories/${repoId}/graph?symbol_id=${symbol.id}&direction=${direction}&depth=${depth}&max_nodes=150`,
   );
-  const byDepth = new Map<number, SymbolSummary[]>();
-  for (const node of graph.data?.nodes ?? []) {
-    if (node.depth === 0) continue;
-    byDepth.set(node.depth, [...(byDepth.get(node.depth) ?? []), node.symbol]);
+  const path = useApi<PathResponse>(to ? `/repositories/${repoId}/paths?from=${symbol.id}&to=${to}` : null);
+  const candidates = useApi<SymbolPage>(debounced ? `/repositories/${repoId}/symbols?q=${encodeURIComponent(debounced)}&limit=20` : null);
+
+  const { symbols, layout } = useMemo(() => {
+    const found = to ? (path.data?.found ? path.data.symbols : []) : (graph.data?.nodes.map((n) => n.symbol) ?? []);
+    return { symbols: found, layout: symbolLayout(found, to ? (path.data?.edges ?? []) : (graph.data?.edges ?? [])) };
+  }, [to, path.data, graph.data]);
+  const byKey = useMemo(() => new Map(symbols.map((s) => [String(s.id), s])), [symbols]);
+  const root = String(symbol.id);
+  const lit = useMemo(() => (hovered ? neighbourhood(hovered, layout.edges, 1) : null), [hovered, layout.edges]);
+  const describe = useCallback((n: PlacedNode) => byKey.get(n.key)?.qualified_name ?? n.label, [byKey]);
+  const edgeTitle = useCallback(
+    (e: PlacedEdge) =>
+      `${byKey.get(e.src)?.qualified_name} → ${byKey.get(e.dst)?.qualified_name} (${e.types.map((t) => label(t).toLowerCase()).join(", ")})`,
+    [byKey],
+  );
+
+  function tracePath(event: React.FormEvent) {
+    event.preventDefault();
+    const items = candidates.data?.items ?? [];
+    const match = items.find((s) => s.qualified_name === target.trim()) ?? items[0];
+    if (match) setParams({ to: String(match.id) });
   }
+
+  const loading = to ? path.loading && !path.data : graph.loading && !graph.data;
+  const error = to ? path.error : graph.error;
+  const toName = to ? (path.data?.symbols.find((s) => String(s.id) === to)?.qualified_name ?? `symbol ${to}`) : null;
+
   return (
     <Card
-      title="Dependency neighbourhood"
+      title={to ? "Dependency path" : "Dependency graph"}
       actions={
-        <>
-          <select value={direction} onChange={(e) => setDirection(e.target.value)} aria-label="Direction">
-            <option value="IN">Who depends on it</option>
-            <option value="OUT">What it depends on</option>
-          </select>
-          <select value={depth} onChange={(e) => setDepth(Number(e.target.value))} aria-label="Depth">
-            {[1, 2, 3, 4, 5, 6].map((d) => (
-              <option key={d} value={d}>
-                depth {d}
-              </option>
-            ))}
-          </select>
-        </>
+        to ? (
+          <button type="button" className="secondary" onClick={() => setParams({ to: null })}>
+            Back to the neighbourhood
+          </button>
+        ) : (
+          <>
+            <div className="segmented" role="group" aria-label="Direction">
+              {DIRECTIONS.map(([d, text]) => (
+                <button key={d} type="button" className={d === direction ? "is-on" : undefined} aria-pressed={d === direction} onClick={() => setParams({ dir: d })}>
+                  {text}
+                </button>
+              ))}
+            </div>
+            <div className="segmented" role="group" aria-label="Depth">
+              {[1, 2, 3].map((d) => (
+                <button key={d} type="button" className={d === depth ? "is-on" : undefined} aria-pressed={d === depth} onClick={() => setParams({ depth: String(d) })}>
+                  {d} {d === 1 ? "hop" : "hops"}
+                </button>
+              ))}
+            </div>
+          </>
+        )
       }
     >
-      {graph.error && <ErrorPanel error={graph.error} />}
-      {graph.data && byDepth.size === 0 && <p className="muted">Nothing in this direction.</p>}
-      {[...byDepth.entries()].map(([d, symbols]) => (
-        <div key={d} className="depth-group">
-          <h3>{d === 1 ? "Directly" : `${d} steps away`}</h3>
-          <ul className="plain">
-            {symbols.map((s) => (
-              <li key={s.id}>
-                <button className="link mono" onClick={() => onSelect(s.id)}>
-                  {s.qualified_name}
-                </button>
-                {s.is_test && <span className="tag">test</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-      {graph.data?.truncated && (
-        <p className="warn-text small">Traversal stopped at its limit ({graph.data.truncation_reason}); more symbols exist.</p>
+      {!to && (
+        <form className="path-form" onSubmit={tracePath}>
+          <input
+            type="search"
+            list="path-targets"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            placeholder="Path to another symbol"
+            aria-label="Path to symbol"
+            spellCheck={false}
+          />
+          <datalist id="path-targets">
+            {candidates.data?.items.map((s) => <option key={s.id} value={s.qualified_name} />)}
+          </datalist>
+          <button type="submit" className="secondary" disabled={!candidates.data?.items.length}>
+            Trace
+          </button>
+        </form>
+      )}
+      {error && <ErrorPanel error={error} />}
+      {loading && <Loading what="Loading the graph" shape="block" />}
+      {to && path.data && !path.data.found && (
+        <p className="muted">
+          No dependency path from <span className="mono">{symbol.qualified_name}</span> to{" "}
+          <span className="mono">{toName}</span> within 8 steps.{" "}
+          <button type="button" className="link" onClick={() => setParams({ symbol: to, to: String(symbol.id) })}>
+            Try the other direction
+          </button>
+        </p>
+      )}
+      {!to && graph.data && layout.nodes.length <= 1 && <p className="muted">Nothing in this direction.</p>}
+      {layout.nodes.length > 1 && (
+        <GraphCanvas
+          key={`${symbol.id}-${direction}-${depth}-${to}`}
+          layout={layout}
+          label={`Dependency ${to ? "path" : "graph"} of ${symbol.qualified_name}: ${layout.nodes.length} symbols`}
+          lit={lit}
+          path={null}
+          focus={hovered}
+          selected={root}
+          centerOn={null}
+          describe={describe}
+          edgeTitle={edgeTitle}
+          onHover={setHovered}
+          onChoose={(key, extend) => setParams(extend ? { to: key } : { symbol: key, to: null })}
+          onClear={() => setHovered(null)}
+        />
+      )}
+      {!to && graph.data?.truncated && (
+        <p className="warn-text small">Stopped at {graph.data.nodes.length} symbols ({graph.data.truncation_reason}); more exist.</p>
       )}
     </Card>
   );

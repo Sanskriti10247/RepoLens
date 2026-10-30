@@ -129,6 +129,108 @@ export function grouper(modules: ModuleNode[], grouping: Grouping): (name: strin
   return (name) => groupKey(name, grouping);
 }
 
+/**
+ * One level finer than ``key`` for module ``m``: a folder opens into its subfolders and files,
+ * a dotted package into its subpackages and modules. Returns ``key`` when there is nothing finer.
+ */
+export function childKey(key: string, m: { name: string; path: string }): string {
+  if (key.endsWith("/")) {
+    const segments = segmentsOf(m.path || m.name.replaceAll(".", "/"));
+    const depth = depthOf(key.slice(0, -1));
+    return depth + 1 >= segments.length ? m.name : `${prefix(segments, depth + 1)}/`;
+  }
+  if (key === m.name) return key;
+  return groupKey(m.name, key.split(".").length + 1);
+}
+
+/**
+ * ``keyOf`` with the groups in ``expanded`` opened one level (repeatedly, for nested opens).
+ * ``parentOf`` maps each opened-out key to the group it came from, for collapsing again.
+ */
+export function expandGroups(
+  modules: ModuleNode[],
+  keyOf: (name: string) => string,
+  expanded: ReadonlySet<string>,
+): { keyOf: (name: string) => string; parentOf: Map<string, string> } {
+  const keys = new Map<string, string>();
+  const parentOf = new Map<string, string>();
+  for (const m of modules) {
+    let key = keyOf(m.name);
+    while (expanded.has(key)) {
+      const next = childKey(key, m);
+      if (next === key) break;
+      parentOf.set(next, key);
+      key = next;
+    }
+    keys.set(m.name, key);
+  }
+  return { keyOf: (name) => keys.get(name) ?? keyOf(name), parentOf };
+}
+
+/** Nodes within ``depth`` hops of ``start`` (either direction) and the edges walked to reach them. */
+export function neighbourhood(
+  start: string,
+  edges: { key: string; src: string; dst: string }[],
+  depth: number,
+): { nodes: Set<string>; edges: Set<string> } {
+  const around = new Map<string, { key: string; other: string }[]>();
+  const link = (from: string, entry: { key: string; other: string }) => {
+    const list = around.get(from);
+    if (list) list.push(entry);
+    else around.set(from, [entry]);
+  };
+  for (const e of edges) {
+    link(e.src, { key: e.key, other: e.dst });
+    link(e.dst, { key: e.key, other: e.src });
+  }
+  const nodes = new Set([start]);
+  const lit = new Set<string>();
+  let frontier = [start];
+  for (let hop = 0; hop < depth && frontier.length; hop += 1) {
+    const next: string[] = [];
+    for (const node of frontier) {
+      for (const { key, other } of around.get(node) ?? []) {
+        lit.add(key);
+        if (!nodes.has(other)) {
+          nodes.add(other);
+          next.push(other);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return { nodes, edges: lit };
+}
+
+/** Shortest path ``from → to`` following edge direction, as edge keys in order; ``null`` if none. */
+export function shortestPath(from: string, to: string, edges: { key: string; src: string; dst: string }[]): string[] | null {
+  if (from === to) return [];
+  const out = new Map<string, { key: string; dst: string }[]>();
+  for (const e of edges) {
+    const list = out.get(e.src);
+    if (list) list.push(e);
+    else out.set(e.src, [e]);
+  }
+  const via = new Map<string, { key: string; from: string }>();
+  const queue = [from];
+  const seen = new Set([from]);
+  while (queue.length) {
+    const node = queue.shift()!;
+    for (const e of out.get(node) ?? []) {
+      if (seen.has(e.dst)) continue;
+      seen.add(e.dst);
+      via.set(e.dst, { key: e.key, from: node });
+      if (e.dst === to) {
+        const path: string[] = [];
+        for (let at = to; at !== from; at = via.get(at)!.from) path.unshift(via.get(at)!.key);
+        return path;
+      }
+      queue.push(e.dst);
+    }
+  }
+  return null;
+}
+
 export function maxDepth(modules: ModuleNode[]): number {
   return Math.max(1, ...modules.map((m) => m.name.split(".").length));
 }
