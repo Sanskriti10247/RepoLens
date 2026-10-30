@@ -22,8 +22,8 @@ from repolens.persistence import graph_queries as q
 from repolens.persistence.models import AnalysisRun, Repository, RepositorySnapshot, SourceFile
 from repolens.repository.git import GitError, GitOutputLimitExceeded
 from repolens.repository.mirror import MirrorStore
-from repolens.services.analysis import effective_run_id
-from repolens.services.errors import InvalidInput, NotFound
+from repolens.services.analysis import effective_run_id, request_mirror_fetch
+from repolens.services.errors import InvalidInput, NotFound, Unavailable
 
 USABLE = (AnalysisStatus.SUCCEEDED.value, AnalysisStatus.PARTIAL.value, AnalysisStatus.REUSED.value)
 DEPENDENCY_TYPES = frozenset(
@@ -248,7 +248,11 @@ class SourceReader:
             raise InvalidInput("Binary files cannot be displayed", code="binary_file")
         mirror = self.mirrors.path_for(ctx.repository_id)
         if not (mirror / "HEAD").exists():
-            raise NotFound("Repository mirror is not available", code="source_unavailable")
+            # Mirrors live on local disk and may be gone after a restart; fetch it again.
+            request_mirror_fetch(session, ctx.repository_id)
+            raise Unavailable(
+                "Fetching the repository source; retry shortly", code="source_fetching"
+            )
         try:
             with self.mirrors.runner.blob_reader(mirror, timeout=30) as reader:
                 data = reader.read(file.blob_sha, max_bytes=MAX_SOURCE_BYTES)

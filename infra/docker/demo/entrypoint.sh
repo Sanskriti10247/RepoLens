@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start a throwaway PostgreSQL, restore the demo snapshot, then run the API and the worker.
+# Start a throwaway PostgreSQL and restore the demo snapshot (unless REPOLENS_DATABASE_URL
+# points at an external database), then run the API and the worker.
 # If either process exits the container exits too, so the host restarts it.
 set -euo pipefail
 
@@ -11,18 +12,28 @@ PG_PORT=5432
 started=$SECONDS
 
 rm -rf "$HOME_DIR"
-mkdir -p "$HOME_DIR/restore" "$HOME_DIR/data" "$HOME_DIR/sock"
+mkdir -p "$HOME_DIR/data/mirrors" "$HOME_DIR/data/git-home" "$HOME_DIR/data/workspaces"
 chmod 0700 "$HOME_DIR"
 
-tar -xzf "$SNAPSHOT" -C "$HOME_DIR/restore"
-mv "$HOME_DIR/restore/mirrors" "$HOME_DIR/data/mirrors"
-mkdir -p "$HOME_DIR/data/git-home" "$HOME_DIR/data/workspaces"
+# With an external database (e.g. Supabase) there is nothing to restore: keep its data, bring
+# the schema up to date, and let the worker fetch mirrors again as they are needed.
+external_db=false
+if [[ -n "${REPOLENS_DATABASE_URL:-}" ]]; then
+  external_db=true
+  (cd /app && alembic upgrade head >/dev/null)
+  echo "{\"event\": \"external_database_ready\", \"seconds\": $((SECONDS - started))}"
+else
+  mkdir -p "$HOME_DIR/restore" "$HOME_DIR/sock"
 
-# Local-only trust is fine: PostgreSQL listens on loopback inside this container and only
-# the API's port is published.
-"$PGBIN/initdb" -D "$PGDATA" -U repolens --encoding=UTF8 --locale=C.UTF-8 \
-  --auth-local=trust --auth-host=trust >/dev/null
-cat >>"$PGDATA/postgresql.conf" <<CONF
+  tar -xzf "$SNAPSHOT" -C "$HOME_DIR/restore"
+  rmdir "$HOME_DIR/data/mirrors"
+  mv "$HOME_DIR/restore/mirrors" "$HOME_DIR/data/mirrors"
+
+  # Local-only trust is fine: PostgreSQL listens on loopback inside this container and only
+  # the API's port is published.
+  "$PGBIN/initdb" -D "$PGDATA" -U repolens --encoding=UTF8 --locale=C.UTF-8 \
+    --auth-local=trust --auth-host=trust >/dev/null
+  cat >>"$PGDATA/postgresql.conf" <<CONF
 listen_addresses = '127.0.0.1'
 port = $PG_PORT
 unix_socket_directories = '$HOME_DIR/sock'
@@ -41,18 +52,19 @@ autovacuum = off
 logging_collector = off
 log_min_messages = warning
 CONF
-"$PGBIN/pg_ctl" -D "$PGDATA" -w -t 60 -l "$HOME_DIR/postgres.log" start >/dev/null
-"$PGBIN/createdb" -h 127.0.0.1 -p "$PG_PORT" -U repolens repolens
-"$PGBIN/pg_restore" -h 127.0.0.1 -p "$PG_PORT" -U repolens -d repolens --no-owner \
-  --exit-on-error "$HOME_DIR/restore/db.dump"
-"$PGBIN/psql" -h 127.0.0.1 -p "$PG_PORT" -U repolens -d repolens -qc "ANALYZE" >/dev/null
-rm -rf "$HOME_DIR/restore"
+  "$PGBIN/pg_ctl" -D "$PGDATA" -w -t 60 -l "$HOME_DIR/postgres.log" start >/dev/null
+  "$PGBIN/createdb" -h 127.0.0.1 -p "$PG_PORT" -U repolens repolens
+  "$PGBIN/pg_restore" -h 127.0.0.1 -p "$PG_PORT" -U repolens -d repolens --no-owner \
+    --exit-on-error "$HOME_DIR/restore/db.dump"
+  "$PGBIN/psql" -h 127.0.0.1 -p "$PG_PORT" -U repolens -d repolens -qc "ANALYZE" >/dev/null
+  rm -rf "$HOME_DIR/restore"
 
-export REPOLENS_DATABASE_URL="postgresql+psycopg://repolens@127.0.0.1:$PG_PORT/repolens"
-# The snapshot may predate the newest migrations; bring its schema up to date (additive
-# migrations only, so this takes a moment even on a tenth of a CPU).
-(cd /app && alembic upgrade head >/dev/null)
-echo "{\"event\": \"demo_database_ready\", \"seconds\": $((SECONDS - started))}"
+  export REPOLENS_DATABASE_URL="postgresql+psycopg://repolens@127.0.0.1:$PG_PORT/repolens"
+  # The snapshot may predate the newest migrations; bring its schema up to date (additive
+  # migrations only, so this takes a moment even on a tenth of a CPU).
+  (cd /app && alembic upgrade head >/dev/null)
+  echo "{\"event\": \"demo_database_ready\", \"seconds\": $((SECONDS - started))}"
+fi
 
 export REPOLENS_DATA_DIR="$HOME_DIR/data"
 export REPOLENS_API_PORT="${PORT:-8000}"
@@ -61,7 +73,7 @@ read_only="${REPOLENS_READ_ONLY:-false}"
 if [[ "${read_only,,}" =~ ^(1|true|yes|on)$ ]]; then
   exec repolens-api
 fi
-if [[ -z "${REPOLENS_API_TOKEN:-}" ]]; then
+if [[ -z "${REPOLENS_API_TOKEN:-}" && -z "${REPOLENS_SUPABASE_URL:-}" ]]; then
   echo '{"event": "demo_writes_disabled", "detail": "REPOLENS_API_TOKEN is not set; registering and analyzing repositories is refused"}'
 fi
 
@@ -70,7 +82,9 @@ stop() {
   trap - TERM INT
   kill -TERM "${pids[@]}" 2>/dev/null || true
   wait "${pids[@]}" 2>/dev/null || true
-  "$PGBIN/pg_ctl" -D "$PGDATA" -m fast -w stop >/dev/null || true
+  if [[ "$external_db" == false ]]; then
+    "$PGBIN/pg_ctl" -D "$PGDATA" -m fast -w stop >/dev/null || true
+  fi
 }
 trap 'stop; exit 143' TERM INT
 

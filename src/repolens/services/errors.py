@@ -30,3 +30,10 @@ class InvalidInput(ServiceError):
 class Conflict(ServiceError):
     status_code = 409
     code = "conflict"
+
+
+class Unavailable(ServiceError):
+    """Temporarily unavailable; the client should retry shortly."""
+
+    status_code = 503
+    code = "unavailable"
