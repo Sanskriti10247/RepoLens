@@ -76,6 +76,10 @@ curl -s -H "$H" -H 'content-type: application/json' \
 | jobs | `GET /jobs`, `GET /jobs/{id}`, `GET /metrics/queue` |
 | questions | `POST /repositories/{id}/questions` |
 
+Test plans, test runs and collection use pytest. For a repository without Python files they
+return 422 with code `language_not_supported` and `details.language` (the most common parsed
+language, for example `typescript`).
+
 All paths are under `/api`.
 
 `GET /analyses/{id}` includes `progress`, the worker's latest report for the run: `stage`
@@ -100,11 +104,12 @@ The response has these sections:
 - `score`: `overall` (0-100, or `null` if no component has data), `grade` (A-F) and
   `components`, each with `key`, `label`, `score` (`null` when excluded), the `weight`
   actually applied and a one-line `detail`.
-- `overview`: file counts by role and language, total bytes, and symbol counts by kind.
+- `overview`: file counts by role, files, bytes and lines per language, total bytes, and
+  symbol counts by kind.
 - `complexity`: `available` (false for analyses parsed before complexity was recorded),
   the distribution in buckets 1-5, 6-10, 11-20 and 21+, `mean`, `p90` and the ten most
   complex functions.
-- `size`: the ten longest functions and the ten largest Python files.
+- `size`: the ten longest functions and the ten largest analysed source files.
 - `documentation`: public symbols, how many have a docstring, and the most called
   undocumented ones.
 - `testing`: test files and functions, testable modules with and without tests, and the

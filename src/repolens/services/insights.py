@@ -408,8 +408,8 @@ def _testing_findings(facts: Facts) -> list[Finding]:
                 "high",
                 "testing",
                 "No test files found",
-                "No file in the repository looks like a test (test_*.py, *_test.py, "
-                "conftest.py or a tests/ directory), so changes cannot be checked "
+                "No file in the repository looks like a test (test_*.py, *.test.ts, "
+                "*_test.go, a tests/ directory and similar), so changes cannot be checked "
                 "automatically. Start with tests for the most depended-upon modules.",
                 [
                     _module_evidence(m.module, f"{m.module.name} (used by {m.fan_in})")
@@ -552,14 +552,14 @@ def _analysis_findings(facts: Facts) -> list[Finding]:
     incomplete = {s: n for s, n in facts.file_statuses.items() if s in _INCOMPLETE and n}
     if incomplete:
         total = sum(incomplete.values())
-        python_files = total + facts.file_statuses.get(FileAnalysisStatus.PARSED.value, 0)
-        share = total / python_files
+        code_files = total + facts.file_statuses.get(FileAnalysisStatus.PARSED.value, 0)
+        share = total / code_files
         found.append(
             Finding(
                 "analysis.incomplete_files",
                 "medium" if share >= INCOMPLETE_FILES_SHARE else "info",
                 "analysis",
-                f"{_plural(total, 'Python file was', 'Python files were')} not fully analysed",
+                f"{_plural(total, 'source file was', 'source files were')} not fully analysed",
                 "Syntax errors, oversized or undecodable files leave parts of the code out of "
                 "every number in this report. See the analysis warnings for the files.",
                 [
@@ -661,12 +661,16 @@ def analysis_insights(session: Session, analysis_id: uuid.UUID) -> dict[str, Any
 
     groups = q.file_groups(session, ctx.snapshot.id)
     roles: dict[str, int] = defaultdict(int)
-    languages: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    languages: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
+    counted: set[str] = set()  # languages with line counts (older snapshots have none)
     for g in groups:
         roles[_role_key(g.role)] += g.files
         if g.language:
             languages[g.language][0] += g.files
             languages[g.language][1] += g.bytes
+            languages[g.language][2] += g.lines or 0
+            if g.lines is not None:
+                counted.add(g.language)
     kinds = q.symbol_kinds(session, run_id)
 
     stats = q.function_stats(session, run_id)
@@ -752,8 +756,13 @@ def analysis_insights(session: Session, analysis_id: uuid.UUID) -> dict[str, Any
             "test_files": test_files,
             "bytes": sum(g.bytes for g in groups),
             "languages": [
-                {"language": name, "files": files, "bytes": size}
-                for name, (files, size) in sorted(
+                {
+                    "language": name,
+                    "files": files,
+                    "bytes": size,
+                    "lines": lines if name in counted else None,
+                }
+                for name, (files, size, lines) in sorted(
                     languages.items(), key=lambda kv: (-kv[1][1], kv[0])
                 )
             ],

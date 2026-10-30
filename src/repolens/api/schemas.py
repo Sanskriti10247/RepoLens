@@ -686,6 +686,7 @@ class LanguageCountOut(Schema):
     language: str
     files: int
     bytes: int
+    lines: int | None  # None for snapshots taken before line counting
 
 
 class InsightOverviewOut(Schema):

@@ -1,12 +1,16 @@
 # RepoLens
 
-RepoLens builds a structured model of a Python repository (symbols, imports, calls,
+RepoLens builds a structured model of a repository (symbols, imports, calls,
 inheritance and tests) and uses it to explain what a code change affects, choose the tests
 that exercise the affected code, and run them in a locked-down container. Every conclusion
 carries the evidence it was drawn from. What RepoLens cannot determine is reported as unknown,
 not guessed.
 
-Scope: Python repositories tested with pytest, hosted on GitHub (public, HTTPS).
+Scope: public GitHub repositories (HTTPS). Every text file is inventoried with its language
+(by extension) and counted by files, bytes and lines. Symbols, references and complexity are
+extracted for Python, JavaScript, TypeScript (including TSX), Go, Java and Rust. Test selection
+and sandboxed runs need a Python repository tested with pytest; for other languages they
+return 422 with code `language_not_supported`.
 
 ![Impact report for a one-line change in boltons](docs/screenshots/impact-report.png)
 
@@ -183,7 +187,7 @@ Job queue: per-kind counts, p50/p95 queue wait and run time, retries and lease s
 |---|---|
 | API | Python 3.12+ (developed on 3.14), FastAPI, Uvicorn, Pydantic v2 and pydantic-settings |
 | Persistence | PostgreSQL 16, SQLAlchemy 2, Alembic, psycopg 3 (graph bulk-loaded with `COPY`) |
-| Code intelligence | tree-sitter 0.25 and tree-sitter-python |
+| Code intelligence | tree-sitter 0.25, tree-sitter-python and tree-sitter-language-pack 0.13 (JavaScript, TypeScript, Go, Java, Rust) |
 | Jobs | A PostgreSQL-backed queue with leases, heartbeats, retries and advisory-lock limits |
 | Sandbox | Docker CLI with a pinned `python:3.12-slim` image (digest-pinned, hash-locked pytest and coverage) |
 | Web | Next.js 16 (App Router), React 19, TypeScript |
@@ -322,6 +326,8 @@ curl -s $API/analyses/3cb2a6dd-9ada-41d5-81f2-9cd83595faeb
   "counts": {
     "files": 112,
     "python_files": 65,
+    "code_files": 65,
+    "code_files_by_language": {"python": 65},
     "symbols": 1681,
     "references": 7071,
     "references_by_status": {"DYNAMIC": 364, "EXTERNAL": 2875, "RESOLVED": 1839, "UNRESOLVED": 1993},
@@ -433,6 +439,13 @@ Python is dynamic, so static analysis has blind spots:
   `@pytest.fixture def test_url(...)`) is listed as a test until a sandboxed
   `pytest --collect-only` marks it as not collected. Without that step, pytest rejects the
   unknown node id and a boltons run ends in `COLLECTION_ERROR`.
+
+Other languages resolve less. Names defined or imported in the same file, members reached
+through `this`/`self`/`super` inside a class, relative JavaScript/TypeScript imports
+(`./util`, `./util.js` for `util.ts`, `./dir/index`) and Java imports that match a file path
+are resolved. Package imports, Go names defined in other files of the same package, Rust
+`use` paths and everything else are reported as unresolved. Branches inside anonymous
+functions (callbacks, closures) are not counted toward any function's complexity.
 
 These gaps lower the completeness of an impact report and push test selection towards a
 broader scope. Coverage from an earlier sandboxed run, when available, adds evidence that

@@ -47,6 +47,7 @@ from repolens.services.jobs import (
     PolicyBlockedError,
     RetryableJobError,
 )
+from repolens.services.test_planning import require_python_tests
 
 MAX_STORED_TAIL = 64 * 1024
 MAX_COVERAGE_ROWS = 50_000
@@ -123,6 +124,7 @@ def request_test_run(
         raise InvalidInput("The analysis has no usable results", code="analysis_not_ready")
     snapshot = session.get(RepositorySnapshot, analysis.snapshot_id)
     assert snapshot is not None  # noqa: S101 - FK
+    require_python_tests(session, analysis.id)
     try:
         execution_policy(settings).check_node_ids(node_ids)
     except PolicyViolation as exc:
@@ -165,6 +167,7 @@ def request_collection(
         raise InvalidInput("The analysis has no usable results", code="analysis_not_ready")
     snapshot = session.get(RepositorySnapshot, analysis.snapshot_id)
     assert snapshot is not None  # noqa: S101 - FK
+    require_python_tests(session, analysis.id)
     test_run = TestRun(
         id=uuid.uuid4(),
         repository_id=analysis.repository_id,
