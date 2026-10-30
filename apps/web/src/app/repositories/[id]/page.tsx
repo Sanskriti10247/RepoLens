@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { AnalysisPipeline } from "@/components/AnalysisPipeline";
+import { GraphCharts } from "@/components/GraphCharts";
+import { ModuleArchitecture } from "@/components/ModuleGraph";
 import {
   Badge,
   Card,
@@ -12,7 +15,6 @@ import {
   FailureNote,
   KeyValues,
   Loading,
-  Progress,
   ReadOnlyNotice,
   SandboxNotice,
   Stat,
@@ -42,7 +44,7 @@ export default function RepositoryOverview() {
       {analyses.data && analyses.data.items.length === 0 && (
         <Empty>No analysis has been recorded for this repository yet.</Empty>
       )}
-      {current && <AnalysisDetail analysisId={current} onChange={analyses.reload} />}
+      {current && <AnalysisDetail analysisId={current} repoId={id} onChange={analyses.reload} />}
       {analyses.data && analyses.data.items.length > 1 && (
         <Card title="Earlier analyses">
           <table className="table">
@@ -131,9 +133,18 @@ function AnalyzeForm({ repoId, onQueued }: { repoId: string; onQueued: () => voi
   );
 }
 
-function AnalysisDetail({ analysisId, onChange }: { analysisId: string; onChange: () => void }) {
+function AnalysisDetail({
+  analysisId,
+  repoId,
+  onChange,
+}: {
+  analysisId: string;
+  repoId: string;
+  onChange: () => void;
+}) {
   const { data, error, loading } = useApi<Analysis>(`/analyses/${analysisId}`, {
     pollWhile: (a) => !TERMINAL_ANALYSIS.has(a.status),
+    pollMs: 1000,
   });
   if (error) return <ErrorPanel error={error} />;
   if (loading && !data) return <Loading what="Loading analysis" />;
@@ -141,8 +152,6 @@ function AnalysisDetail({ analysisId, onChange }: { analysisId: string; onChange
   const done = data.status === "SUCCEEDED" || data.status === "PARTIAL" || data.status === "REUSED";
   const counts = (data.counts ?? {}) as Record<string, unknown>;
   const references = (counts.references_by_status ?? {}) as Record<string, number>;
-  const edges = (counts.edges_by_type ?? {}) as Record<string, number>;
-  const queued = data.status === "QUEUED";
   return (
     <>
       <Card
@@ -175,17 +184,7 @@ function AnalysisDetail({ analysisId, onChange }: { analysisId: string; onChange
           <p className="hint">Results reused from an identical earlier analysis of the same commit.</p>
         )}
         {data.error && <FailureNote>{data.error}</FailureNote>}
-        {!TERMINAL_ANALYSIS.has(data.status) && (
-          <Progress
-            doing={queued ? "Queued" : "Analyzing"}
-            since={queued ? data.created_at : (data.started_at ?? data.created_at)}
-            detail={
-              queued
-                ? "waiting for a worker to pick it up"
-                : "fetching, inventorying and parsing; this page refreshes by itself"
-            }
-          />
-        )}
+        <AnalysisPipeline analysis={data} />
       </Card>
       {done && data.snapshot && (
         <>
@@ -200,6 +199,16 @@ function AnalysisDetail({ analysisId, onChange }: { analysisId: string; onChange
               hint="static discovery"
             />
           </Stats>
+          <Card title="Architecture">
+            <p className="hint graph-intro">
+              Modules and the dependencies between them, drawn from the resolved graph. Importers sit above what they
+              import; select a node to see what it depends on and what uses it.
+            </p>
+            <ModuleArchitecture analysisId={data.id} repoId={repoId} />
+          </Card>
+          <Card title="Graph at a glance">
+            <GraphCharts analysisId={data.id} repoId={repoId} />
+          </Card>
           <div className="columns">
             <Card title="Languages">
               <Languages inventory={data.snapshot.language_inventory ?? {}} />
@@ -211,12 +220,7 @@ function AnalysisDetail({ analysisId, onChange }: { analysisId: string; onChange
               </p>
             </Card>
           </div>
-          <div className="columns">
-            <IndexingCompleteness analysisId={data.id} />
-            <Card title="Dependency edges">
-              <Distribution values={edges} />
-            </Card>
-          </div>
+          <IndexingCompleteness analysisId={data.id} />
           <TestsCard analysisId={data.id} onChange={onChange} />
           <WarningsCard analysisId={data.id} issues={data.snapshot.issue_counts} />
         </>
