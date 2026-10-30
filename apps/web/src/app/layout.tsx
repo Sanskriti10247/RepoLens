@@ -6,7 +6,6 @@ import type { ReactNode } from "react";
 
 import { ApiStatus } from "@/components/ApiStatus";
 import { Mark } from "@/components/Mark";
-import { PageTransitions } from "@/components/PageTransitions";
 import { InstanceNote, SiteNav } from "@/components/SiteNav";
 import { THEME_SCRIPT, ThemeToggle } from "@/components/ThemeToggle";
 
@@ -28,7 +27,7 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", displ
 
 export const metadata: Metadata = {
   title: { default: "RepoLens", template: "%s · RepoLens" },
-  description: "Code graph, health report, change impact and test selection for Python repositories",
+  description: "Code graph, health report, change impact and test selection for a Git repository",
 };
 
 export const viewport: Viewport = {
@@ -63,7 +62,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
         <InstanceNote />
-        <PageTransitions />
         <main className="content" id="main">
           {children}
         </main>

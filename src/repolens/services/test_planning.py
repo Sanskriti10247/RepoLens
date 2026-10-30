@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, aliased
 
 from repolens.domain.enums import ChangeSetStatus, EdgeType, SymbolKind
+from repolens.parsers.treesitter import PARSED_LANGUAGES
 from repolens.persistence.models import (
     AnalysisFile,
     AnalysisRun,
@@ -20,6 +21,7 @@ from repolens.persistence.models import (
     DependencyEdge,
     ImpactItem,
     ImpactReport,
+    RepositorySnapshot,
     SourceFile,
     Symbol,
     TestCaseRecord,
@@ -100,6 +102,23 @@ def ensure_test_catalog(session: Session, run_id: uuid.UUID) -> list[TestCase]:
     ]
 
 
+def require_python_tests(session: Session, run_id: uuid.UUID) -> None:
+    """Test selection and sandboxed runs use pytest: refuse repositories without Python."""
+    run = session.get(AnalysisRun, run_id)
+    snapshot = session.get(RepositorySnapshot, run.snapshot_id) if run and run.snapshot_id else None
+    inventory: dict[str, int] = (snapshot.language_inventory if snapshot else None) or {}
+    if "python" in inventory:
+        return
+    code = {k: v for k, v in inventory.items() if k in PARSED_LANGUAGES} or {"text": 0}
+    language = max(sorted(code), key=lambda k: code[k])
+    raise InvalidInput(
+        f"Test selection and test runs are not supported for {language} "
+        "(only Python test suites run with pytest)",
+        code="language_not_supported",
+        details={"language": language},
+    )
+
+
 def create_test_plan(
     session: Session,
     change_id: uuid.UUID,
@@ -125,6 +144,7 @@ def create_test_plan(
         raise InvalidInput("A budgeted plan needs max_tests or max_seconds", code="budget_missing")
 
     run_id = change.target_run_id
+    require_python_tests(session, run_id)
     catalog = ensure_test_catalog(session, run_id)
     statuses = dict(
         session.execute(

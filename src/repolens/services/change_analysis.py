@@ -38,6 +38,7 @@ from repolens.impact.changes import (
     map_symbol_changes,
     parse_raw_diff,
 )
+from repolens.parsers.treesitter import PARSED_LANGUAGES
 from repolens.persistence import jobs as queue
 from repolens.persistence.db import transaction
 from repolens.persistence.models import (
@@ -410,7 +411,7 @@ def _mapping_status(
     sides = [f for f in (old, new) if f is not None]
     if any(f.is_binary for f in sides):
         return ChangeMappingStatus.BINARY
-    if not sides or all(f.language != "python" for f in sides):
+    if not sides or all(f.language not in PARSED_LANGUAGES for f in sides):
         return ChangeMappingStatus.NON_PYTHON
     statuses = {f.status for f in sides}
     parsed = {FileAnalysisStatus.PARSED.value, FileAnalysisStatus.PARSED_WITH_ERRORS.value}

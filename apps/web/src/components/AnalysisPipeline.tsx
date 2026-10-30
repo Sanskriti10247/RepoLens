@@ -21,7 +21,7 @@ export const DEFAULT_STAGES = ["fetch", "snapshot", "parse", "resolve", "persist
 const STAGE_INFO: Record<string, { title: string; doing: string; blurb: string }> = {
   fetch: { title: "Fetch", doing: "Fetching", blurb: "update the bare mirror, resolve the ref" },
   snapshot: { title: "Snapshot", doing: "Recording the snapshot", blurb: "list and hash every file" },
-  parse: { title: "Parse", doing: "Parsing", blurb: "tree-sitter reads each Python file" },
+  parse: { title: "Parse", doing: "Parsing", blurb: "tree-sitter reads each source file" },
   resolve: { title: "Resolve", doing: "Resolving names", blurb: "names become references and edges" },
   persist: { title: "Persist", doing: "Writing the graph", blurb: "symbols, references, edges" },
   tests: { title: "Tests", doing: "Finding tests", blurb: "pytest tests, found statically" },
@@ -347,9 +347,9 @@ function stageOutputs(analysis: Analysis, counts: Record<string, unknown>): Reco
   const out: Record<string, string> = {};
   if (analysis.snapshot) out.fetch = `commit ${shortSha(analysis.snapshot.commit_sha).slice(0, 7)}`;
   if (analysis.snapshot?.file_count != null) out.snapshot = plural(analysis.snapshot.file_count, "file");
-  const python = num(counts.python_files);
+  const python = num(counts.code_files ?? counts.python_files);
   const hits = num(counts.parse_cache_hits);
-  if (python !== null) out.parse = plural(python, "Python file") + (hits ? `, ${hits} from cache` : "");
+  if (python !== null) out.parse = plural(python, "parsed file") + (hits ? `, ${hits} from cache` : "");
   const references = num(counts.references);
   if (references !== null) out.resolve = plural(references, "reference");
   const symbols = num(counts.symbols);

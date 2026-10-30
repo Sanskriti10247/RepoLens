@@ -20,47 +20,18 @@ export default function RepositoriesPage() {
   });
   return (
     <>
-      <section className="hero" aria-labelledby="home-title">
-        <div>
-          <p className="eyebrow">A code analyzer for Python repositories</p>
-          <h1 id="home-title">
-            Read a codebase <em>before</em> you change it.
-          </h1>
-          <p className="lede">
-            Paste a public GitHub repository. RepoLens parses it into a graph of every symbol, import and call, grades
-            its health, and shows what a change touches and which tests are worth running. Every conclusion keeps the
-            evidence it came from.
-          </p>
-          <RegisterForm onRegistered={reload} />
-        </div>
-        <ol className="hero-index" aria-label="What an analysis gives you">
-          <li>
-            <strong>A code graph</strong>
-            <span>Symbols, imports, calls and inheritance, each reference marked resolved or not.</span>
-          </li>
-          <li>
-            <strong>A health report</strong>
-            <span>Complexity, documentation, tests and coupling, scored and graded with the evidence.</span>
-          </li>
-          <li>
-            <strong>Change impact</strong>
-            <span>Two revisions compared, the diff followed outwards through the graph.</span>
-          </li>
-          <li>
-            <strong>Test selection</strong>
-            <span>The tests that exercise the change, run in a locked-down sandbox.</span>
-          </li>
-          <li>
-            <strong>Answers with citations</strong>
-            <span>Plain questions answered from the graph, every claim pointing at source.</span>
-          </li>
-        </ol>
+      <section className="home-head" aria-labelledby="home-title">
+        <h1 id="home-title">Analyze a repository</h1>
+        <p className="lede">
+          Symbols, imports and calls as a graph, a health report, the impact of a change and the tests that cover it.
+        </p>
+        <RegisterForm onRegistered={reload} />
       </section>
-      <Card title={data ? <>Analyzed so far <span className="count-chip num">{data.page.total}</span></> : "Analyzed so far"}>
+      <Card title={data ? <>Repositories <span className="count-chip num">{data.page.total}</span></> : "Repositories"}>
         {loading && !data && <Loading what="Loading repositories" shape="table" rows={3} />}
         {error && <ErrorPanel error={error} />}
         {data && data.items.length === 0 && (
-          <Empty>Nothing analyzed yet. Paste a GitHub URL above; small Python repositories work best on this instance.</Empty>
+          <Empty>Nothing analyzed yet.</Empty>
         )}
         {data && data.items.length > 0 && (
           <table className="table repo-table">
@@ -81,9 +52,6 @@ export default function RepositoriesPage() {
                     <td>
                       <Link href={`/repositories/${repo.id}`} title={repo.canonical_url} className="row-title row-link">
                         {repoSlug(repo.canonical_url)}
-                        <span className="arrow" aria-hidden="true">
-                          →
-                        </span>
                       </Link>
                       <span className="row-sub">
                         {repo.host}
@@ -117,9 +85,10 @@ export default function RepositoriesPage() {
           </table>
         )}
       </Card>
-      <Card title="How RepoLens works">
+      <details className="home-diagram">
+        <summary>How the pieces fit together</summary>
         <SystemDiagram />
-      </Card>
+      </details>
     </>
   );
 }
@@ -176,17 +145,8 @@ function RegisterForm({ onRegistered }: { onRegistered: () => void }) {
         </label>
         <button type="submit" disabled={busy || readOnly === null || !url.trim()}>
           {busy ? "Submitting…" : "Register and analyze"}
-          {!busy && (
-            <span className="arrow" aria-hidden="true">
-              →
-            </span>
-          )}
         </button>
       </form>
-      <p className="hint">
-        Public GitHub repositories only. The code is fetched into a bare mirror and parsed as text; nothing in it is
-        executed.
-      </p>
       {error && <ErrorPanel error={error} title="Could not register the repository" />}
     </div>
   );

@@ -1,4 +1,4 @@
-"""Python code analysis of a snapshot: parse every file, resolve names, persist the graph."""
+"""Code analysis of a snapshot: parse every supported file, resolve names, persist the graph."""
 
 from __future__ import annotations
 
@@ -15,9 +15,10 @@ from sqlalchemy.orm import Session
 from repolens.codegraph.modules import ModuleName, dedupe_modules, module_names
 from repolens.codegraph.resolver import resolve_files
 from repolens.domain.enums import FileAnalysisStatus, FileMode, Severity
-from repolens.parsers.base import ParsedFile
+from repolens.parsers.base import LanguageAdapter, ParsedFile
 from repolens.parsers.python import PythonAdapter, decode_python_source
 from repolens.parsers.serialize import from_json, to_json
+from repolens.parsers.treesitter import adapters as other_adapters
 from repolens.persistence import analysis_writer as writer
 from repolens.persistence.models import AnalysisRun, ParseCacheEntry
 from repolens.repository.git import GitError
@@ -25,7 +26,7 @@ from repolens.services.jobs import JobContext
 from repolens.services.progress import NULL_PROGRESS, ProgressSink
 from repolens.services.snapshots import SnapshotFile
 
-RESOLVER_REVISION = "1"
+RESOLVER_REVISION = "2"
 MAX_PROBLEMS_PER_FILE = 5
 _INCOMPLETE = frozenset(
     {
@@ -47,10 +48,14 @@ def synthetic_module_name(path: str) -> str:
 class PythonSnapshotAnalyzer:
     def __init__(self, *, max_file_bytes: int, parse_cache: bool = True) -> None:
         self.adapter = PythonAdapter()
+        self.adapters: dict[str, LanguageAdapter] = {"python": self.adapter}
+        self.adapters.update((a.language, a) for a in other_adapters())
         self.max_file_bytes = max_file_bytes
         self.parse_cache = parse_cache
         self._new_cache_entries: list[tuple[SnapshotFile, str, ParsedFile]] = []
-        self.version = f"{self.adapter.version}+resolver{RESOLVER_REVISION}"
+        self.version = "+".join(
+            [*(a.version for a in self.adapters.values()), f"resolver{RESOLVER_REVISION}"]
+        )
 
     def analyze(
         self,
@@ -112,11 +117,14 @@ class PythonSnapshotAnalyzer:
         timings["persist_ms"] = _ms(started)
 
         statuses = Counter(o.status.value for o in outcomes)
-        python_outcomes = [o for o in outcomes if o.module_name is not None]
+        code = {f.id: f.language for f in files if f.path in modules}
+        code_outcomes = [o for o in outcomes if o.file_id in code]
         return {
-            "python_files": len(python_outcomes),
+            "python_files": sum(1 for o in code_outcomes if code[o.file_id] == "python"),
+            "code_files": len(code_outcomes),
+            "code_files_by_language": dict(sorted(Counter(code.values()).items())),
             "files_by_status": dict(sorted(statuses.items())),
-            "incomplete_files": sum(1 for o in python_outcomes if o.status in _INCOMPLETE),
+            "incomplete_files": sum(1 for o in code_outcomes if o.status in _INCOMPLETE),
             "symbols": len(symbol_ids),
             "references": sum(1 for r in reference_ids if r is not None),
             "references_by_status": resolution.status_counts(),
@@ -138,15 +146,26 @@ class PythonSnapshotAnalyzer:
                 # Scripts that are not importable, and duplicate module names, still contain
                 # code that calls into the repository; give them unique synthetic names.
                 chosen[path] = ModuleName(path, synthetic_module_name(path), False, "")
+        names = {m.name for m in chosen.values()}
+        for file in files:
+            # Other languages are named by path; Python module names never contain "/".
+            if self._adapter(file) not in (None, self.adapter) and file.path not in names:
+                chosen[file.path] = ModuleName(file.path, file.path, False, "")
         return chosen, {p for p in shadowed if p.endswith(".pyi")}
 
     def _is_python(self, file: SnapshotFile) -> bool:
-        return (
-            file.language == "python"
-            and file.mode in (FileMode.REGULAR.value, FileMode.EXECUTABLE.value)
-            and not file.is_binary
-            and self.adapter.handles(file.path)
-        )
+        return self._adapter(file) is self.adapter
+
+    def _adapter(self, file: SnapshotFile) -> LanguageAdapter | None:
+        adapter = self.adapters.get(file.language or "")
+        if (
+            adapter is None
+            or file.mode not in (FileMode.REGULAR.value, FileMode.EXECUTABLE.value)
+            or file.is_binary
+            or not adapter.handles(file.path)
+        ):
+            return None
+        return adapter
 
     def _analyze_file(
         self,
@@ -160,7 +179,7 @@ class PythonSnapshotAnalyzer:
         skip = _skip_status(file)
         if skip is not None:
             return writer.FileOutcome(file.id, skip), None
-        if not self._is_python(file) or file.path in shadowed_stubs or file.path not in modules:
+        if file.path in shadowed_stubs or file.path not in modules:
             return writer.FileOutcome(file.id, FileAnalysisStatus.SKIPPED_UNSUPPORTED), None
         module = modules[file.path].name
         if file.size_bytes > self.max_file_bytes:
@@ -215,7 +234,8 @@ class PythonSnapshotAnalyzer:
         warnings: list[writer.WarningRecord],
     ) -> tuple[ParsedFile | None, writer.FileOutcome | None]:
         try:
-            source = decode_python_source(read_blob(file.blob_sha, max_bytes=self.max_file_bytes))
+            data = read_blob(file.blob_sha, max_bytes=self.max_file_bytes)
+            source = decode_python_source(data) if self._is_python(file) else _utf8(data)
         except GitError as exc:
             warnings.append(
                 writer.WarningRecord("FILE_READ_FAILED", Severity.ERROR, str(exc)[:500], file.id)
@@ -224,12 +244,17 @@ class PythonSnapshotAnalyzer:
         if source is None:
             warnings.append(
                 writer.WarningRecord(
-                    "FILE_ENCODING", Severity.WARNING, "Not valid UTF-8 or PEP 263 source", file.id
+                    "FILE_ENCODING",
+                    Severity.WARNING,
+                    "Not valid UTF-8 (or PEP 263) source",
+                    file.id,
                 )
             )
             return None, writer.FileOutcome(file.id, FileAnalysisStatus.SKIPPED_ENCODING, module)
         try:
-            return self.adapter.parse(file.path, module, source), None
+            adapter = self._adapter(file)
+            assert adapter is not None  # noqa: S101 - only files in the module map get here
+            return adapter.parse(file.path, module, source), None
         except Exception as exc:  # noqa: BLE001 - one file's parser defect must not sink the run
             warnings.append(
                 writer.WarningRecord(
@@ -295,6 +320,15 @@ def _skip_status(file: SnapshotFile) -> FileAnalysisStatus | None:
     if file.is_binary:
         return FileAnalysisStatus.SKIPPED_BINARY
     return None
+
+
+def _utf8(data: bytes) -> bytes | None:
+    data = data.removeprefix(b"\xef\xbb\xbf")
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return data
 
 
 def _ms(started: float) -> float:

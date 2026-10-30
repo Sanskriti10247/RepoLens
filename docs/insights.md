@@ -20,10 +20,12 @@ the values quoted below) and `persistence/insight_queries.py` (the aggregate que
   the qualified name starts with `_` and the symbol is not local to a function. Methods of a
   private class, everything in a private module (`pkg._compat`) and everything in a script
   that is not importable (RepoLens names those `__file__.<path>`) are therefore not public.
-- **Modules** are analysed Python files. A module is **testable** if it defines at least one
+- **Modules** are analysed source files (Python, JavaScript, TypeScript, Go, Java, Rust). A module is **testable** if it defines at least one
   class or function, so an `__init__.py` that only re-exports names is not counted as untested.
 - **Lines** of a function are `end_line - start_line + 1` of its definition, decorators
-  included. Lines of a module are its line count. File sizes come from the inventory.
+  included. Lines of a module are its line count. File sizes and the line count per language
+in `overview.languages` come from the inventory, which counts every text file (`null` lines
+for snapshots taken before line counting).
 
 ## Cyclomatic complexity
 
@@ -49,6 +51,11 @@ This follows McCabe's definition as implemented by common Python tools (radon, m
 except that `assert` is not a branch here. Only the function's own body is measured.
 Nested functions and classes are separate symbols with their own value. Branches inside a
 `lambda` count toward the enclosing function, because lambdas are not symbols.
+
+The other languages use the same rule over their own syntax: `if`, loops (`for`, `for…in`,
+`while`, `do`), `catch`, the ternary `?:`, each `case` of a `switch` or `match` arm except
+`default` and `_`, and each `&&`, `||` and `??`. Nested named functions, methods and classes
+are measured separately; anonymous functions are not measured at all.
 
 Analyses parsed before complexity was recorded have `NULL` there. Their report has
 `complexity.available = false`, and the complexity component is left out of the overall
@@ -119,7 +126,7 @@ links). Findings are sorted by severity, then by the amount of evidence.
 | `structure.hubs` | a definition has 25 or more distinct callers | info |
 | `dead_code.candidates` | any dead-code candidate (below) | low |
 | `resolution.low` | resolution rate below 80% | medium below 60%, else low |
-| `analysis.incomplete_files` | Python files parsed with errors, skipped as too large or undecodable, or failed | medium if 10% or more of Python files, else info |
+| `analysis.incomplete_files` | source files parsed with errors, skipped as too large or undecodable, or failed | medium if 10% or more of source files, else info |
 
 ## Dead-code candidates
 

@@ -132,8 +132,8 @@ class ChangeMappingStatus(StrEnum):
 
     MAPPED = "MAPPED"
     MAPPED_WITH_PARSE_ERRORS = "MAPPED_WITH_PARSE_ERRORS"
-    NOT_ANALYZED = "NOT_ANALYZED"  # Python, but skipped (too large, encoding, failure)
-    NON_PYTHON = "NON_PYTHON"  # configuration, documentation, other languages
+    NOT_ANALYZED = "NOT_ANALYZED"  # parsed language, but skipped (too large, encoding, failure)
+    NON_PYTHON = "NON_PYTHON"  # configuration, documentation, languages without a parser
     BINARY = "BINARY"
     SPECIAL = "SPECIAL"  # symlinks and submodules
 

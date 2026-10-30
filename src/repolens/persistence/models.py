@@ -146,6 +146,7 @@ class SourceFile(Base):
     language: Mapped[str | None] = mapped_column(Text)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     is_binary: Mapped[bool] = mapped_column(nullable=False, default=False)
+    line_count: Mapped[int | None] = mapped_column(Integer)  # None: binary or not read
 
 
 class AnalysisRun(Base):

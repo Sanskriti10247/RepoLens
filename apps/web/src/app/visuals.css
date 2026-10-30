@@ -45,14 +45,6 @@
   font-weight: 550;
   box-shadow: 0 0 0 1px var(--rule-strong), 0 1px 2px rgb(0 0 0 / 6%);
 }
-.segmented button.is-on::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-right: 2px;
-}
 
 /* ---- analysis pipeline ------------------------------------------------------------- */
 
@@ -292,43 +284,28 @@
 
 /* ---- module graph ------------------------------------------------------------------ */
 
-.graph-intro { margin: -4px 0 12px; }
 .mg { min-width: 0; }
-.mg-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 10px; }
+.mg-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
+.mg-search input { height: 32px; width: 220px; padding: 2px 10px; font-size: 13px; font-family: var(--mono); }
+.mg-search input[aria-invalid] { border-color: var(--warn); }
+.mg-missing { margin: -4px 0 8px; }
 .mg-depth { display: inline-flex; align-items: center; gap: 8px; }
-.mg-depth select { height: 30px; padding: 2px 8px; font-size: 13px; }
-.mg-zoom { display: inline-flex; gap: 6px; margin-left: auto; }
-.mg-zoom button { height: 30px; min-width: 32px; padding: 0 10px; font-size: 14px; }
-.mg-stage {
-  position: relative;
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  background:
-    radial-gradient(circle, color-mix(in srgb, var(--rule-strong) 55%, transparent) 0.8px, transparent 1.2px) 0 0 / 18px 18px,
-    var(--surface);
-  overflow: hidden;
-}
-.mg-svg { display: block; width: 100%; height: clamp(320px, 56vh, 540px); touch-action: none; cursor: grab; user-select: none; }
+.mg-depth select { height: 32px; padding: 2px 8px; font-size: 13px; }
+.mg-zoom { position: absolute; top: 8px; right: 8px; display: inline-flex; gap: 4px; }
+.mg-zoom button { height: 28px; min-width: 30px; padding: 0 9px; font-size: 13px; background: var(--surface); }
+.mg-stage { position: relative; border: 1px solid var(--rule); border-radius: 3px; background: var(--surface); overflow: hidden; }
+.mg-svg { display: block; width: 100%; height: auto; min-height: 240px; max-height: min(60vh, 620px); touch-action: none; cursor: grab; user-select: none; outline: none; }
+.mg-svg:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .mg-stage.is-dragging .mg-svg { cursor: grabbing; }
-.mg-world { transition: transform 0.28s var(--ease-out); }
-.mg-stage.is-dragging .mg-world { transition: none; }
-.mg-hint { position: absolute; left: 12px; bottom: 6px; margin: 0; font-size: 11.5px; pointer-events: none; }
+.mg-world.is-gliding { transition: transform 0.3s var(--ease-out); }
 .mg-empty { padding: 40px 16px; text-align: center; margin: 0; }
 
-.mg-edge {
-  fill: none;
-  stroke: var(--rule-strong);
-  stroke-linecap: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 0.7s var(--ease-out) forwards;
-  animation-delay: var(--delay, 0ms);
-  transition: stroke 0.25s, opacity 0.25s;
-}
+.mg-edge { fill: none; stroke: var(--rule-strong); stroke-linecap: round; transition: stroke 0.2s, opacity 0.2s, d 0.3s var(--ease-out); }
 .mg-edge.is-cycle { stroke: color-mix(in srgb, var(--warn) 75%, var(--bg)); }
 .mg-edge.is-lit { stroke: var(--accent); }
 .mg-edge.is-lit.is-cycle { stroke: var(--warn); }
-.mg-edge.is-dim { opacity: 0.18; }
+.mg-edge.is-path { stroke-width: 3px !important; }
+.mg-edge.is-dim { opacity: 0.15; }
 .mg-flow {
   fill: none;
   stroke: var(--bg);
@@ -342,35 +319,38 @@
 .mg-arrowhead { fill: var(--rule-strong); }
 .mg-arrowhead.is-lit { fill: var(--accent); }
 
-.mg-node { cursor: pointer; outline: none; }
-.mg-node-body { animation: node-in 0.5s var(--ease-out) both; animation-delay: var(--delay, 0ms); transition: opacity 0.25s; }
+.mg-node { cursor: pointer; outline: none; transition: transform 0.3s var(--ease-out), opacity 0.2s; }
+.mg-stage.is-dragging .mg-node, .mg-stage.is-dragging .mg-edge { transition: none; }
 .mg-node rect:first-child { fill: var(--bg); stroke: var(--rule-strong); stroke-width: 1; transition: fill 0.2s, stroke 0.2s; }
 .mg-node .mg-stack { fill: var(--rule-strong); }
 .mg-node text { font-family: var(--mono); font-size: 11px; fill: var(--ink); pointer-events: none; }
 .mg-node.is-cycle rect:first-child { stroke: var(--warn); stroke-dasharray: 4 3; }
 .mg-node.is-near rect:first-child { stroke: var(--accent); }
+.mg-node.is-path rect:first-child { stroke: var(--accent); stroke-width: 2; fill: var(--mark-fill); }
 .mg-node.is-focus rect:first-child,
 .mg-node.is-selected rect:first-child { fill: var(--accent); stroke: var(--accent); stroke-dasharray: none; }
 .mg-node.is-focus text,
 .mg-node.is-selected text { fill: var(--on-accent); }
-.mg-node.is-dim .mg-node-body { opacity: 0.28; }
+.mg-node.is-dim { opacity: 0.28; }
 .mg-node:focus-visible rect:first-child { stroke: var(--accent); stroke-width: 2.5; }
 
-.mg-legend { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 10px 0 0; }
+.mg-legend { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 8px 0 0; }
 .mg-legend > span { display: inline-flex; align-items: center; gap: 7px; }
+.mg-legend .mg-keys { gap: 3px; margin-left: auto; }
 .mg-key { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--rule-strong); }
 .mg-key-cycle { border-top: 2px dashed var(--warn); }
+kbd { font-size: 11px; padding: 0 4px; border: 1px solid var(--rule-strong); border-bottom-width: 2px; border-radius: 3px; color: var(--ink-2); background: var(--surface); }
 
-.mg-details {
-  margin-top: 14px;
-  padding: 12px 0 0 14px;
-  border-left: 2px solid var(--accent);
-  animation: rise 0.35s var(--ease-out) both;
-}
-.mg-details header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.mg-details { margin-top: 14px; padding: 12px 0 0 14px; border-left: 2px solid var(--accent); }
+.mg-details header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.mg-details-actions { display: inline-flex; gap: 16px; flex-wrap: wrap; font-size: 13.5px; }
 .mg-details-title { margin: 0; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 500; overflow-wrap: anywhere; }
 .mg-details-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; }
 .mg-members summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.mg-path { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+.mg-path select { max-width: 100%; }
+.mg-route { display: flex; flex-wrap: wrap; gap: 2px 0; list-style: none; margin: 0; padding: 0; }
+.mg-route li + li::before { content: "→"; margin: 0 6px; color: var(--muted); }
 
 /* ---- charts -------------------------------------------------------------------------- */
 
@@ -510,9 +490,9 @@
   .pipe-text { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding-bottom: 10px; }
   .pipe-note { white-space: normal; }
   .charts { grid-template-columns: minmax(0, 1fr); }
-  .mg-zoom { margin-left: 0; }
+  .mg-search, .mg-search input { width: 100%; }
+  .mg-legend .mg-keys { display: none; }
   .mg-details-cols { grid-template-columns: minmax(0, 1fr); }
-  .mg-hint { display: none; }
   .trace { margin-top: -24px; }
 }
 

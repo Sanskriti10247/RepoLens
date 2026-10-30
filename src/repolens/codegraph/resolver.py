@@ -11,6 +11,12 @@ What is modelled:
 - calls to classes (constructors) linked to ``__init__``;
 - virtual dispatch: ``self.m()`` also links, heuristically, to overrides in known subclasses.
 
+Other languages (JavaScript, TypeScript, Go, Java, Rust) get a simpler model: names bound
+in the same file (definitions and imports), ``this``/``self``/``super`` members inside a class,
+relative JS/TS imports (``./x``, ``../y/index``) and Java imports that match a file path.
+Everything else, including package imports and same-package names in other Go files, is
+UNRESOLVED rather than guessed.
+
 What is deliberately *not* modelled (reported as UNRESOLVED or DYNAMIC instead of guessed):
 instance attributes, values returned by calls, ``getattr``/``importlib``/``eval``, monkey
 patching, dependency injection and anything that depends on runtime state.
@@ -49,6 +55,9 @@ _CALLABLE_KINDS = frozenset(
     }
 )
 _FUNCTION_KINDS = _CALLABLE_KINDS - {SymbolKind.CLASS}
+# Relative JS/TS import specifiers resolve to the first existing file, as Node/TypeScript do.
+_JS_SUFFIXES = ("", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts")
+_JS_INDEX = ("/index.ts", "/index.tsx", "/index.js", "/index.jsx")
 _EDGE_FOR_REF = {
     ReferenceKind.IMPORT: EdgeType.IMPORTS,
     ReferenceKind.CALL: EdgeType.CALLS,
@@ -169,6 +178,7 @@ class Resolver:
         self.bases: dict[str, list[str]] = {}
         self.subclasses: dict[str, list[str]] = defaultdict(list)
         self.path_index: dict[str, str] = {}  # file path → module name
+        self.language: dict[str, str] = {p.path: p.language for p in parsed}
         self.declared_bases: Counter[str] = Counter()
         self.external_bases: dict[str, list[str]] = defaultdict(list)
         self._weak = False  # set when a heuristic step was used for the current lookup
@@ -208,10 +218,14 @@ class Resolver:
             if name not in table or table[name][0] <= line:
                 table[name] = (line, value)
 
+        python = parsed.language == "python"
         for symbol in parsed.symbols:
             parent = self.symbols.get(symbol.parent_key) if symbol.parent_key else None
-            if parent is not None and (
-                parent.kind is SymbolKind.MODULE or parent.kind in _FUNCTION_KINDS
+            # Go/Rust methods sit at file level but are not plain names (Python's are in classes).
+            if (
+                parent is not None
+                and symbol.kind is not SymbolKind.METHOD
+                and (parent.kind is SymbolKind.MODULE or parent.kind in _FUNCTION_KINDS)
             ):
                 bind(parent.key, symbol.name, symbol.span.start_line, _Sym(symbol.key))
         for ref in parsed.references:
@@ -219,12 +233,17 @@ class Resolver:
                 self.declared_bases[ref.source_key] += 1
             elif ref.kind is ReferenceKind.IMPORT and ref.import_detail is not None:
                 detail = ref.import_detail
-                if detail.is_star:
+                if python and detail.is_star:
                     if ref.source_key == module_key:
                         module.star_imports.append(detail)
-                elif detail.bound_name is not None:
-                    value = _Lazy(parsed.path, _binding_detail(detail))
-                    bind(ref.source_key, detail.bound_name, ref.span.start_line, value)
+                    continue
+                if python:
+                    bound, value = detail.bound_name, _Lazy(parsed.path, _binding_detail(detail))
+                else:  # exactly the name the import introduces, if any
+                    bound = None if detail.is_star else detail.alias or detail.name
+                    value = _Lazy(parsed.path, detail)
+                if bound is not None:
+                    bind(ref.source_key, bound, ref.span.start_line, value)
         for name in parsed.module_assignments:
             module.bindings[name] = _Var(name)
         for scope, table in tables.items():
@@ -265,6 +284,8 @@ class Resolver:
     def _resolve_reference(self, path: str, ref: RawReference) -> Resolution:
         self._weak = False
         self._depth = 0
+        if self.language.get(path, "python") != "python":
+            return self._resolve_foreign(path, ref)
         if ref.kind is ReferenceKind.IMPORT and ref.import_detail is not None:
             outcome = self._resolve_import(path, ref.import_detail)
             return self._to_resolution(outcome, "import")
@@ -288,6 +309,57 @@ class Resolver:
             return Resolution(ResolutionStatus.UNRESOLVED, "name_not_found")
         outcome = self._walk(self._force(value), rest)
         return self._to_resolution(outcome, "scope_lookup")
+
+    def _resolve_foreign(self, path: str, ref: RawReference) -> Resolution:
+        """Non-Python files: same-file names, class members and file-path imports only."""
+        if ref.kind is ReferenceKind.IMPORT and ref.import_detail is not None:
+            return self._to_resolution(self._foreign_import(path, ref.import_detail), "import")
+        if ref.dynamic:
+            return Resolution(ResolutionStatus.DYNAMIC, "dynamic_target", external=ref.target)
+        if not ref.target:
+            return Resolution(ResolutionStatus.UNRESOLVED, "no_static_target")
+        head, *rest = ref.target.split(".")
+        if head in ("this", "self") and rest:
+            return self._resolve_self(ref, rest)
+        if head == "super" and rest:
+            return self._resolve_super(ref, rest)
+        value = self._lookup_name(path, self._lookup_scope(ref), head)
+        if value is None:
+            return Resolution(ResolutionStatus.UNRESOLVED, "name_not_found")
+        return self._to_resolution(self._walk(self._force(value), rest), "scope_lookup")
+
+    def _foreign_import(self, path: str, detail: ImportDetail) -> _Outcome:
+        module = detail.module or ""
+        found: str | None = None
+        if self.language.get(path) in ("javascript", "typescript") and module.startswith("."):
+            found = self._js_module(path, module)
+        elif self.language.get(path) == "java" and detail.name and not detail.is_star:
+            wanted = "/" + f"{module}.{detail.name}".replace(".", "/") + ".java"
+            hits = [m for p, m in self.path_index.items() if f"/{p}".endswith(wanted)]
+            found = hits[0] if len(hits) == 1 else None
+        if found is None:
+            return _Fail(ResolutionStatus.UNRESOLVED, "import_not_resolved")
+        if detail.name is None or detail.is_star:
+            return _Mod(found)
+        return self._lookup_in_module(found, [detail.name], set())
+
+    def _js_module(self, path: str, specifier: str) -> str | None:
+        parts = [*PurePosixPath(path).parent.parts, *specifier.split("/")]
+        stack: list[str] = []
+        for part in parts:
+            if part == "..":
+                if not stack:
+                    return None
+                stack.pop()
+            elif part not in ("", "."):
+                stack.append(part)
+        base = "/".join(stack)
+        # TypeScript ESM imports name the emitted file: "./a.js" means "./a.ts".
+        stem = base.rsplit(".", 1)[0] if base.endswith((".js", ".jsx", ".mjs", ".cjs")) else None
+        candidates = [base + s for s in _JS_SUFFIXES] + [base + s for s in _JS_INDEX]
+        if stem:
+            candidates += [stem + s for s in (".ts", ".tsx", ".mts", ".cts")]
+        return next((self.path_index[c] for c in candidates if c in self.path_index), None)
 
     def _resolve_self(self, ref: RawReference, rest: list[str]) -> Resolution:
         cls = self._enclosing_class(ref.source_key)
@@ -360,7 +432,10 @@ class Resolver:
         if name in self.modules:
             return _Mod(name)
         top = name.split(".", maxsplit=1)[0]
-        if any(m == top or m.startswith(f"{top}.") for m in self.modules):
+        if any(
+            (m == top or m.startswith(f"{top}.")) and self.language.get(mod.path) == "python"
+            for m, mod in self.modules.items()
+        ):
             # The package exists in this repository but this module does not.
             matched = self._path_suffix_match(name)
             if matched is not None:
@@ -432,6 +507,8 @@ class Resolver:
             return _Fail(ResolutionStatus.UNRESOLVED, "import_cycle")
         self._depth += 1
         try:
+            if self.language.get(value.module_file, "python") != "python":
+                return self._foreign_import(value.module_file, value.detail)
             return self._resolve_import(value.module_file, value.detail)
         finally:
             self._depth -= 1

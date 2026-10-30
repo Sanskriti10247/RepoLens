@@ -1,18 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
+import { GraphCanvas } from "@/components/GraphCanvas";
 import { Empty, ErrorPanel, Loading } from "@/components/ui";
 import { label } from "@/lib/format";
 import { useReducedMotion } from "@/lib/motion";
 import {
+  childKey,
   displayName,
+  expandGroups,
   groupGraph,
   grouper,
   layoutGraph,
   maxDepth,
+  neighbourhood,
+  shortestPath,
   type Grouping,
+  type Layout,
+  type PlacedEdge,
   type PlacedNode,
 } from "@/lib/moduleLayout";
 import type { ModuleGraph as ModuleGraphData } from "@/lib/types";
@@ -24,16 +31,7 @@ const EDGE_FILTERS: [string, string, string[] | null][] = [
   ["inherits", "Inheritance", ["INHERITS"]],
   ["all", "All", null],
 ];
-const PAD = 28;
-const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 4;
-
-interface View {
-  k: number;
-  x: number;
-  y: number;
-}
-const IDENTITY: View = { k: 1, x: 0, y: 0 };
+const HOPS = [1, 2, 3];
 
 /** Fetches ``/analyses/{id}/modules`` and draws it. */
 export function ModuleArchitecture({ analysisId, repoId }: { analysisId: string; repoId: string }) {
@@ -44,142 +42,202 @@ export function ModuleArchitecture({ analysisId, repoId }: { analysisId: string;
   return <ModuleGraphView graph={data} repoId={repoId} />;
 }
 
+/** The view as it is kept in the address bar, so a focused picture can be shared. */
+interface UrlState {
+  grouping: Grouping;
+  filter: string;
+  hops: number;
+  open: string[];
+  selected: string | null;
+  to: string | null;
+}
+
+function readUrl(): UrlState {
+  const p = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  const group = p.get("group");
+  const hops = Number(p.get("hops"));
+  return {
+    grouping: !group || group === "auto" || group === "module" ? ((group as Grouping | null) ?? "auto") : Number(group) || "auto",
+    filter: EDGE_FILTERS.some(([key]) => key === p.get("edges")) ? p.get("edges")! : "imports",
+    hops: HOPS.includes(hops) ? hops : 1,
+    open: p.get("open")?.split(",").filter(Boolean) ?? [],
+    selected: p.get("focus"),
+    to: p.get("to"),
+  };
+}
+
+function writeUrl(state: UrlState) {
+  const url = new URL(window.location.href);
+  const set = (name: string, value: string | null, fallback: string) =>
+    value && value !== fallback ? url.searchParams.set(name, value) : url.searchParams.delete(name);
+  set("group", String(state.grouping), "auto");
+  set("edges", state.filter, "imports");
+  set("hops", String(state.hops), "1");
+  set("open", state.open.join(","), "");
+  set("focus", state.selected, "");
+  set("to", state.selected ? state.to : null, "");
+  if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url);
+}
+
 export function ModuleGraphView({ graph, repoId }: { graph: ModuleGraphData; repoId: string }) {
   const reduced = useReducedMotion();
-  const [grouping, setGrouping] = useState<Grouping>("auto");
-  const [filter, setFilter] = useState("imports");
+  const listId = useId();
+  const [initial] = useState(readUrl);
+  const [grouping, setGrouping] = useState<Grouping>(initial.grouping);
+  const [filter, setFilter] = useState(initial.filter);
+  const [hops, setHops] = useState(initial.hops);
+  const [open, setOpen] = useState<string[]>(initial.open);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [view, setView] = useState<View>(IDENTITY);
-  const [dragging, setDragging] = useState(false);
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ moved: number; pinch: number | null }>({ moved: 0, pinch: null });
+  const [selected, setSelected] = useState<string | null>(initial.selected);
+  const [to, setTo] = useState<string | null>(initial.to);
+  const [centerOn, setCenterOn] = useState<{ key: string } | null>(initial.selected ? { key: initial.selected } : null);
+  const [query, setQuery] = useState("");
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => writeUrl({ grouping, filter, hops, open, selected, to }), [grouping, filter, hops, open, selected, to]);
 
   const types = EDGE_FILTERS.find(([key]) => key === filter)?.[2] ?? null;
+  const base = useMemo(() => grouper(graph.modules, grouping), [graph.modules, grouping]);
+  const { keyOf, parentOf } = useMemo(() => expandGroups(graph.modules, base, new Set(open)), [graph.modules, base, open]);
   const layout = useMemo(() => {
-    const grouped = groupGraph(graph, grouper(graph.modules, grouping), types ? new Set(types) : null);
+    const grouped = groupGraph(graph, keyOf, types ? new Set(types) : null);
     return layoutGraph(grouped.nodes, grouped.edges);
-  }, [graph, grouping, types]);
+  }, [graph, keyOf, types]);
+  const byKey = useMemo(() => new Map(layout.nodes.map((n) => [n.key, n])), [layout.nodes]);
 
-  // A new grouping or filter is a new picture: start from the fitted view.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setView(IDENTITY);
+  // A key from the URL or an earlier picture that is no longer drawn selects nothing.
+  const current = selected && byKey.has(selected) ? selected : null;
+  const target = current && to && byKey.has(to) && to !== current ? to : null;
+  const focus = current ?? hovered;
+  const lit = useMemo(() => (focus ? neighbourhood(focus, layout.edges, hops) : null), [focus, layout.edges, hops]);
+  const route = useMemo(() => {
+    if (!current || !target) return null;
+    const forward = shortestPath(current, target, layout.edges);
+    const keys = forward ?? shortestPath(target, current, layout.edges);
+    if (!keys) return { found: false as const, from: current, to: target };
+    const edges = keys.map((k) => layout.edges.find((e) => e.key === k)!);
+    const nodes = [edges[0]!.src, ...edges.map((e) => e.dst)];
+    return { found: true as const, from: forward ? current : target, nodes, highlight: { nodes: new Set(nodes), edges: new Set(keys) } };
+  }, [current, target, layout.edges]);
+
+  function regroup(next: () => void) {
+    next();
+    setOpen([]);
     setSelected(null);
-  }, [grouping, filter]);
-
-  const focus = selected ?? hovered;
-  const lit = useMemo(() => {
-    if (!focus) return null;
-    const nodes = new Set([focus]);
-    const edges = new Set<string>();
-    for (const e of layout.edges) {
-      if (e.src === focus || e.dst === focus) {
-        nodes.add(e.src);
-        nodes.add(e.dst);
-        edges.add(e.key);
-      }
-    }
-    return { nodes, edges };
-  }, [focus, layout.edges]);
-
-  const vbW = layout.width + PAD * 2;
-  const vbH = layout.height + PAD * 2 + 40; // room for same-row arcs under the last row
-
-  /** Pointer position in viewBox units. */
-  const toLocal = useCallback(
-    (clientX: number, clientY: number) => {
-      const svg = svgRef.current;
-      const rect = svg?.getBoundingClientRect();
-      if (!svg || !rect || !rect.width || !rect.height) return { x: 0, y: 0, scale: 1 };
-      const scale = Math.max(vbW / rect.width, vbH / rect.height);
-      const offsetX = (rect.width * scale - vbW) / 2;
-      const offsetY = (rect.height * scale - vbH) / 2;
-      return { x: (clientX - rect.left) * scale - offsetX, y: (clientY - rect.top) * scale - offsetY, scale };
-    },
-    [vbW, vbH],
-  );
-
-  const zoomAt = useCallback((factor: number, cx: number, cy: number) => {
-    setView((v) => {
-      const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.k * factor));
-      const f = k / v.k;
-      return { k, x: cx - (cx - v.x) * f, y: cy - (cy - v.y) * f };
-    });
-  }, []);
-
-  // Wheel zoom needs a non-passive listener; plain scrolling keeps scrolling the page.
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const onWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return;
-      event.preventDefault();
-      const p = toLocal(event.clientX, event.clientY);
-      zoomAt(Math.exp(-event.deltaY * 0.0025), p.x, p.y);
-    };
-    svg.addEventListener("wheel", onWheel, { passive: false });
-    return () => svg.removeEventListener("wheel", onWheel);
-  }, [toLocal, zoomAt]);
-
-  function onPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    gesture.current = { moved: 0, pinch: null };
-    if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      gesture.current.pinch = Math.hypot(a!.x - b!.x, a!.y - b!.y);
-    }
+    setTo(null);
   }
 
-  function onPointerMove(event: ReactPointerEvent<SVGSVGElement>) {
-    const previous = pointers.current.get(event.pointerId);
-    if (!previous) return;
-    const current = { x: event.clientX, y: event.clientY };
-    pointers.current.set(event.pointerId, current);
-    if (pointers.current.size === 2 && gesture.current.pinch) {
-      const [a, b] = [...pointers.current.values()];
-      const distance = Math.hypot(a!.x - b!.x, a!.y - b!.y);
-      const mid = toLocal((a!.x + b!.x) / 2, (a!.y + b!.y) / 2);
-      zoomAt(distance / gesture.current.pinch, mid.x, mid.y);
-      gesture.current.pinch = distance;
-      gesture.current.moved += 10;
+  function choose(key: string, extend: boolean) {
+    if (extend && current && key !== current) {
+      setTo((t) => (t === key ? null : key));
       return;
     }
-    const dx = current.x - previous.x;
-    const dy = current.y - previous.y;
-    gesture.current.moved += Math.abs(dx) + Math.abs(dy);
-    if (gesture.current.moved > 4) {
-      if (!dragging) {
-        setDragging(true);
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-      }
-      const { scale } = toLocal(0, 0);
-      setView((v) => ({ ...v, x: v.x + dx * scale, y: v.y + dy * scale }));
+    setTo(null);
+    setSelected((s) => (s === key ? null : key));
+  }
+
+  function expand(key: string) {
+    const node = byKey.get(key);
+    if (!node || node.members.length < 2) return;
+    setOpen((o) => (o.includes(key) ? o : [...o, key]));
+    setSelected(null);
+  }
+
+  function collapse(key: string) {
+    const parent = parentOf.get(key);
+    if (!parent) return;
+    setOpen((o) => o.filter((k) => k !== parent && !k.startsWith(parent)));
+    setSelected(parent);
+    setCenterOn({ key: parent });
+  }
+
+  function select(key: string) {
+    setSelected(key);
+    setTo(null);
+    setCenterOn({ key });
+  }
+
+  /** Find a module or group by name, opening the groups around a module so it is drawn on its own. */
+  function search(text: string) {
+    const wanted = text.trim();
+    if (!wanted) return;
+    const node = layout.nodes.find((n) => n.label === wanted || n.key === wanted);
+    if (node) {
+      setMissing(false);
+      select(node.key);
+      return;
     }
+    const mod =
+      graph.modules.find((m) => m.name === wanted || displayName(m.name) === wanted) ??
+      graph.modules.find((m) => m.name.endsWith(`.${wanted}`));
+    if (!mod) {
+      setMissing(true);
+      return;
+    }
+    setMissing(false);
+    const opened = [...open];
+    for (let key = keyOf(mod.name); key !== mod.name; ) {
+      const next = childKey(key, mod);
+      if (next === key) break;
+      opened.push(key);
+      key = next;
+    }
+    setOpen(opened);
+    select(mod.name);
   }
 
-  function onPointerUp(event: ReactPointerEvent<SVGSVGElement>) {
-    pointers.current.delete(event.pointerId);
-    if (pointers.current.size === 0) setDragging(false);
-  }
+  const describe = useCallback(
+    (n: PlacedNode) =>
+      `${n.label}${n.members.length > 1 ? `, ${n.members.length} modules` : ""}${n.inCycle ? ", in an import cycle" : ""}`,
+    [],
+  );
+  const edgeTitle = useCallback(
+    (e: PlacedEdge) =>
+      `${displayName(e.src)} → ${displayName(e.dst)}: ${e.weight} ${e.weight === 1 ? "link" : "links"} (${e.types.map((t) => label(t).toLowerCase()).join(", ")})`,
+    [],
+  );
 
-  function choose(key: string) {
-    if (gesture.current.moved > 4) return; // the end of a drag, not a click
-    setSelected((current) => (current === key ? null : key));
-  }
-
-  const rowOf = useMemo(() => new Map(layout.nodes.map((n) => [n.key, n.row])), [layout.nodes]);
   const depthLimit = maxDepth(graph.modules);
-  const selectedNode = layout.nodes.find((n) => n.key === selected) ?? null;
+  const selectedNode = current ? byKey.get(current)! : null;
+  const names = useMemo(
+    () => [...new Set([...layout.nodes.map((n) => n.label), ...graph.modules.map((m) => displayName(m.name))])].sort(),
+    [layout.nodes, graph.modules],
+  );
 
   if (!graph.modules.length) {
-    return <Empty>No Python modules were recorded for this analysis, so there is no architecture to draw.</Empty>;
+    return <Empty>No modules were recorded for this analysis, so there is no architecture to draw.</Empty>;
   }
 
   return (
     <div className="mg" data-motion={reduced ? "reduced" : "full"}>
       <div className="mg-toolbar">
+        <form
+          className="mg-search"
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            search(query);
+          }}
+        >
+          <input
+            type="search"
+            list={listId}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setMissing(false);
+            }}
+            placeholder="Find a module"
+            aria-label="Find a module"
+            aria-invalid={missing || undefined}
+            spellCheck={false}
+          />
+          <datalist id={listId}>
+            {names.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+        </form>
         <div className="segmented" role="group" aria-label="Dependency type">
           {EDGE_FILTERS.map(([key, name]) => (
             <button
@@ -187,19 +245,19 @@ export function ModuleGraphView({ graph, repoId }: { graph: ModuleGraphData; rep
               type="button"
               className={filter === key ? "is-on" : undefined}
               aria-pressed={filter === key}
-              onClick={() => setFilter(key)}
+              onClick={() => regroup(() => setFilter(key))}
             >
               {name}
             </button>
           ))}
         </div>
         <label className="mg-depth">
-          <span className="label">Group by</span>
+          <span className="label">Group</span>
           <select
             value={String(grouping)}
             onChange={(e) => {
               const value = e.target.value;
-              setGrouping(value === "auto" || value === "module" ? value : Number(value));
+              regroup(() => setGrouping(value === "auto" || value === "module" ? value : Number(value)));
             }}
             aria-label="Grouping level"
           >
@@ -212,95 +270,44 @@ export function ModuleGraphView({ graph, repoId }: { graph: ModuleGraphData; rep
             <option value="module">Module</option>
           </select>
         </label>
-        <div className="mg-zoom" role="group" aria-label="Zoom">
-          <button type="button" className="secondary" onClick={() => zoomAt(1.3, vbW / 2, vbH / 2)} aria-label="Zoom in">
-            +
-          </button>
-          <button type="button" className="secondary" onClick={() => zoomAt(1 / 1.3, vbW / 2, vbH / 2)} aria-label="Zoom out">
-            −
-          </button>
-          <button type="button" className="secondary" onClick={() => setView(IDENTITY)}>
-            Fit
-          </button>
+        <div className="segmented" role="group" aria-label="Neighbour depth">
+          {HOPS.map((h) => (
+            <button key={h} type="button" className={hops === h ? "is-on" : undefined} aria-pressed={hops === h} onClick={() => setHops(h)}>
+              {h} {h === 1 ? "hop" : "hops"}
+            </button>
+          ))}
         </div>
       </div>
+      {missing && <p className="small warn-text mg-missing">No module or group named “{query.trim()}”.</p>}
 
-      <div className={`mg-stage${dragging ? " is-dragging" : ""}`}>
-        {layout.nodes.length === 0 ? (
-          <p className="mg-empty muted">Nothing to draw at this grouping.</p>
-        ) : (
-          <svg
-            ref={svgRef}
-            className="mg-svg"
-            viewBox={`${-PAD} ${-PAD} ${vbW} ${vbH}`}
-            preserveAspectRatio="xMidYMid meet"
-            role="group"
-            aria-label={`Module graph: ${layout.nodes.length} nodes, ${layout.edges.length} links`}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            onClick={(e) => {
-              if (e.target === e.currentTarget && gesture.current.moved <= 4) setSelected(null);
-            }}
-          >
-            <defs>
-              <marker id="mg-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-                <path d="M0,0 L8,4 L0,8 z" className="mg-arrowhead" />
-              </marker>
-              <marker id="mg-arrow-lit" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-                <path d="M0,0 L8,4 L0,8 z" className="mg-arrowhead is-lit" />
-              </marker>
-            </defs>
-            <g
-              className="mg-world"
-              style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}
-            >
-              <g className="mg-edges">
-                {layout.edges.map((e) => {
-                  const on = lit?.edges.has(e.key) ?? false;
-                  const layer = rowOf.get(e.src) ?? 0;
-                  return (
-                    <path
-                      key={`${filter}-${grouping}-${e.key}`}
-                      d={e.path}
-                      pathLength={1}
-                      className={`mg-edge${e.cycle ? " is-cycle" : ""}${on ? " is-lit" : ""}${lit && !on ? " is-dim" : ""}`}
-                      style={{ strokeWidth: Math.min(4, 1 + Math.log2(e.weight) * 0.45), "--delay": `${120 + layer * 70}ms` } as CSSProperties}
-                      markerEnd={on ? "url(#mg-arrow-lit)" : "url(#mg-arrow)"}
-                    >
-                      <title>{`${displayName(e.src)} → ${displayName(e.dst)}: ${e.weight} ${e.weight === 1 ? "link" : "links"} (${e.types.map((t) => label(t).toLowerCase()).join(", ")})`}</title>
-                    </path>
-                  );
-                })}
-                {lit &&
-                  layout.edges
-                    .filter((e) => lit.edges.has(e.key))
-                    .map((e) => <path key={`flow-${e.key}`} d={e.path} className={`mg-flow${e.cycle ? " is-cycle" : ""}`} />)}
-              </g>
-              <g className="mg-nodes">
-                {layout.nodes.map((n) => (
-                  <GraphNode
-                    key={`${grouping}-${n.key}`}
-                    node={n}
-                    state={!lit ? "idle" : n.key === focus ? "focus" : lit.nodes.has(n.key) ? "near" : "dim"}
-                    selected={n.key === selected}
-                    onEnter={() => setHovered(n.key)}
-                    onLeave={() => setHovered((h) => (h === n.key ? null : h))}
-                    onChoose={() => choose(n.key)}
-                  />
-                ))}
-              </g>
-            </g>
-          </svg>
-        )}
-        <p className="mg-hint muted">Drag to pan · pinch or Ctrl + scroll to zoom · select a node for details</p>
-      </div>
+      {layout.nodes.length === 0 ? (
+        <p className="mg-empty muted">Nothing to draw at this grouping.</p>
+      ) : (
+        <GraphCanvas
+          key={`${grouping}-${filter}`}
+          layout={layout}
+          label={`Module graph: ${layout.nodes.length} nodes, ${layout.edges.length} links`}
+          lit={route?.found ? null : lit}
+          path={route?.found ? route.highlight : null}
+          focus={focus}
+          selected={current}
+          centerOn={centerOn}
+          describe={describe}
+          edgeTitle={edgeTitle}
+          onHover={setHovered}
+          onChoose={choose}
+          onOpen={expand}
+          onClear={() => {
+            setSelected(null);
+            setTo(null);
+          }}
+        />
+      )}
 
       <div className="mg-legend small muted">
         <span>
           <span className="mg-key mg-key-edge" aria-hidden="true" />
-          depends on (arrow points at the dependency)
+          depends on
         </span>
         {graph.import_cycles.length > 0 ? (
           <span>
@@ -313,6 +320,10 @@ export function ModuleGraphView({ graph, repoId }: { graph: ModuleGraphData; rep
         <span className="num">
           {graph.modules.length.toLocaleString("en-US")} modules · {graph.edges.length.toLocaleString("en-US")} module links
         </span>
+        <span className="mg-keys">
+          <kbd>Shift</kbd>-click: path · double-click: open group · <kbd>←</kbd>
+          <kbd>→</kbd> <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd>
+        </span>
       </div>
 
       {selectedNode && (
@@ -320,7 +331,14 @@ export function ModuleGraphView({ graph, repoId }: { graph: ModuleGraphData; rep
           node={selectedNode}
           layout={layout}
           repoId={repoId}
-          onSelect={setSelected}
+          parent={parentOf.get(selectedNode.key) ?? null}
+          route={route}
+          to={target}
+          names={layout.nodes.filter((n) => n.key !== selectedNode.key)}
+          onSelect={select}
+          onPathTo={setTo}
+          onExpand={() => expand(selectedNode.key)}
+          onCollapse={() => collapse(selectedNode.key)}
           onClose={() => setSelected(null)}
         />
       )}
@@ -328,66 +346,33 @@ export function ModuleGraphView({ graph, repoId }: { graph: ModuleGraphData; rep
   );
 }
 
-function GraphNode({
-  node,
-  state,
-  selected,
-  onEnter,
-  onLeave,
-  onChoose,
-}: {
-  node: PlacedNode;
-  state: "idle" | "focus" | "near" | "dim";
-  selected: boolean;
-  onEnter: () => void;
-  onLeave: () => void;
-  onChoose: () => void;
-}) {
-  const text = node.label.length > 26 ? `…${node.label.slice(-25)}` : node.label;
-  const group = node.members.length > 1;
-  return (
-    <g
-      className={`mg-node is-${state}${node.inCycle ? " is-cycle" : ""}${selected ? " is-selected" : ""}`}
-      transform={`translate(${node.x}, ${node.y})`}
-      style={{ "--delay": `${node.row * 70 + node.order * 22}ms` } as CSSProperties}
-      tabIndex={0}
-      role="button"
-      aria-pressed={selected}
-      aria-label={`${node.label}${group ? `, ${node.members.length} modules` : ""}${node.inCycle ? ", in an import cycle" : ""}`}
-      onPointerEnter={onEnter}
-      onPointerLeave={onLeave}
-      onFocus={onEnter}
-      onBlur={onLeave}
-      onClick={onChoose}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onChoose();
-        }
-      }}
-    >
-      <g className="mg-node-body">
-        <rect x={-node.w / 2} y={-node.h / 2} width={node.w} height={node.h} rx={4} />
-        {group && <rect className="mg-stack" x={-node.w / 2 + 3} y={node.h / 2} width={node.w - 6} height={3} rx={1} />}
-        <text y={4} textAnchor="middle">
-          {text}
-        </text>
-      </g>
-    </g>
-  );
-}
+type Route = { found: false; from: string; to: string } | { found: true; from: string; nodes: string[] } | null;
 
 function NodeDetails({
   node,
   layout,
   repoId,
+  parent,
+  route,
+  to,
+  names,
   onSelect,
+  onPathTo,
+  onExpand,
+  onCollapse,
   onClose,
 }: {
   node: PlacedNode;
-  layout: ReturnType<typeof layoutGraph>;
+  layout: Layout;
   repoId: string;
+  parent: string | null;
+  route: Route;
+  to: string | null;
+  names: PlacedNode[];
   onSelect: (key: string) => void;
+  onPathTo: (key: string | null) => void;
+  onExpand: () => void;
+  onCollapse: () => void;
   onClose: () => void;
 }) {
   const out = layout.edges.filter((e) => e.src === node.key).sort((a, b) => b.weight - a.weight);
@@ -397,9 +382,21 @@ function NodeDetails({
     <aside className="mg-details" aria-label={`Details for ${node.label}`}>
       <header>
         <h3 className="mg-details-title mono">{node.label}</h3>
-        <button type="button" className="link" onClick={onClose}>
-          Close
-        </button>
+        <span className="mg-details-actions">
+          {node.members.length > 1 && (
+            <button type="button" className="link" onClick={onExpand}>
+              Expand
+            </button>
+          )}
+          {parent && (
+            <button type="button" className="link" onClick={onCollapse}>
+              Collapse into {displayName(parent)}
+            </button>
+          )}
+          <button type="button" className="link" onClick={onClose}>
+            Close
+          </button>
+        </span>
       </header>
       {node.inCycle && <p className="warn-text small">Part of an import cycle: these modules import each other.</p>}
       {node.members.length === 1 ? (
@@ -425,6 +422,31 @@ function NodeDetails({
       <div className="mg-details-cols">
         <NeighbourList title={`Depends on (${out.length})`} items={out.map((e) => [e.dst, e.weight])} onSelect={onSelect} />
         <NeighbourList title={`Used by (${incoming.length})`} items={incoming.map((e) => [e.src, e.weight])} onSelect={onSelect} />
+      </div>
+      <div className="mg-path">
+        <label className="mg-depth">
+          <span className="label">Path to</span>
+          <select value={to ?? ""} onChange={(e) => onPathTo(e.target.value || null)} aria-label="Path to">
+            <option value="">—</option>
+            {names.map((n) => (
+              <option key={n.key} value={n.key}>
+                {n.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {route && !route.found && <p className="small muted">No dependency path between them in either direction.</p>}
+        {route?.found && (
+          <ol className="mg-route small mono" aria-label="Dependency path">
+            {route.nodes.map((key) => (
+              <li key={key}>
+                <button type="button" className="link mono" onClick={() => onSelect(key)}>
+                  {displayName(key)}
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
     </aside>
   );

@@ -48,16 +48,20 @@ class FileGroup:
     language: str | None
     files: int
     bytes: int
+    lines: int | None  # None when no file of the group has a line count (older snapshots)
 
 
 def file_groups(session: Session, snapshot_id: uuid.UUID) -> list[FileGroup]:
     rows = _rows(
         session,
-        "SELECT role, language, count(*), coalesce(sum(size_bytes), 0) FROM source_files "
-        "WHERE snapshot_id = :snapshot GROUP BY role, language",
+        "SELECT role, language, count(*), coalesce(sum(size_bytes), 0), sum(line_count) "
+        "FROM source_files WHERE snapshot_id = :snapshot GROUP BY role, language",
         snapshot=snapshot_id,
     )
-    return [FileGroup(r[0], r[1], int(r[2]), int(r[3])) for r in rows]
+    return [
+        FileGroup(r[0], r[1], int(r[2]), int(r[3]), None if r[4] is None else int(r[4]))
+        for r in rows
+    ]
 
 
 def symbol_kinds(session: Session, run_id: uuid.UUID) -> dict[str, int]:
@@ -180,7 +184,7 @@ class FileItem:
 
 
 def largest_files(session: Session, run_id: uuid.UUID, *, limit: int) -> list[FileItem]:
-    """Largest analysed (Python) files, with their definitions and line counts."""
+    """Largest analysed source files, with their definitions and line counts."""
     rows = _rows(
         session,
         """
