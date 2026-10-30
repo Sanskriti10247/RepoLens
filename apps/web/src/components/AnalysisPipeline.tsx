@@ -347,7 +347,7 @@ function stageOutputs(analysis: Analysis, counts: Record<string, unknown>): Reco
   const out: Record<string, string> = {};
   if (analysis.snapshot) out.fetch = `commit ${shortSha(analysis.snapshot.commit_sha).slice(0, 7)}`;
   if (analysis.snapshot?.file_count != null) out.snapshot = plural(analysis.snapshot.file_count, "file");
-  const python = num(counts.python_files);
+  const python = num(counts.code_files ?? counts.python_files);
   const hits = num(counts.parse_cache_hits);
   if (python !== null) out.parse = plural(python, "parsed file") + (hits ? `, ${hits} from cache` : "");
   const references = num(counts.references);

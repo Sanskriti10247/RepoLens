@@ -207,7 +207,7 @@ function AnalysisDetail({
         <>
           <Stats>
             <Stat label="Files" value={data.snapshot.file_count ?? "—"} hint={formatBytes(data.snapshot.total_bytes)} />
-            <Stat label="Parsed files" value={num(counts.python_files)} />
+            <Stat label="Parsed files" value={num(counts.code_files ?? counts.python_files)} />
             <Stat label="Symbols" value={num(counts.symbols)} />
             <Stat label="References" value={num(counts.references)} />
             <Stat
