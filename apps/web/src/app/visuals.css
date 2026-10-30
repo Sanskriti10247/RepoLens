@@ -6,47 +6,53 @@
  */
 
 :root {
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --seg-0: var(--accent);
   --seg-1: var(--ink-2);
-  --seg-2: color-mix(in srgb, var(--accent) 58%, var(--paper));
-  --seg-3: color-mix(in srgb, var(--ink-2) 52%, var(--paper));
-  --seg-4: color-mix(in srgb, var(--accent) 32%, var(--paper));
-  --seg-5: color-mix(in srgb, var(--ink-2) 28%, var(--paper));
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
+  --seg-2: color-mix(in srgb, var(--accent) 55%, var(--bg));
+  --seg-3: color-mix(in srgb, var(--ink-2) 50%, var(--bg));
+  --seg-4: color-mix(in srgb, var(--accent) 30%, var(--bg));
+  --seg-5: color-mix(in srgb, var(--ink-2) 26%, var(--bg));
 }
 
 /* ---- segmented control ---------------------------------------------------------- */
 
-.segmented { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 3px; overflow: hidden; max-width: 100%; }
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-sunk);
+  max-width: 100%;
+}
 .segmented button {
   background: transparent;
   color: var(--ink-2);
   border: 0;
-  border-radius: 0;
-  border-left: 1px solid var(--rule);
-  height: 30px;
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 400;
-  transition: background-color 0.2s, color 0.2s;
+  border-radius: 5px;
+  height: 32px;
+  padding: 0 13px;
+  font-size: 13.5px;
+  font-weight: 450;
+  box-shadow: none;
+  transition: background-color 0.25s var(--ease-out), color 0.2s, box-shadow 0.25s;
 }
-.segmented button:first-child { border-left: 0; }
-.segmented button:hover:not(:disabled) { background: var(--paper-2); border-color: var(--rule); }
+.segmented button:hover:not(:disabled) { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--ink); border-color: transparent; box-shadow: none; }
 .segmented button.is-on,
-.segmented button.is-on:hover:not(:disabled) { background: var(--mark-fill); color: var(--accent); font-weight: 500; }
+.segmented button.is-on:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 550;
+  box-shadow: 0 0 0 1px var(--rule-strong), 0 1px 2px rgb(0 0 0 / 6%);
+}
+.segmented button.is-on::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 2px;
+}
 
 /* ---- analysis pipeline ------------------------------------------------------------- */
 
@@ -67,7 +73,7 @@
   height: 18px;
   border-radius: 50%;
   border: 1.5px solid var(--rule-strong);
-  background: var(--paper);
+  background: var(--bg);
   display: grid;
   place-items: center;
   transition: background-color 0.45s var(--ease-out), border-color 0.45s var(--ease-out), transform 0.45s var(--ease-out);
@@ -132,7 +138,7 @@
 .pipe-step { font-size: 12.5px; color: var(--muted); }
 .pipe-clock { font-family: var(--mono); font-size: 13px; color: var(--accent); }
 .pipe-counter { display: flex; align-items: center; gap: 14px; max-width: 620px; }
-.pipe-bar { position: relative; flex: 1; height: 6px; background: var(--paper-2); overflow: hidden; border-radius: 1px; }
+.pipe-bar { position: relative; flex: 1; height: 6px; background: var(--bg-sunk); overflow: hidden; border-radius: 1px; }
 .pipe-bar > span {
   position: absolute;
   inset: 0;
@@ -230,7 +236,7 @@
   animation: grow-y 0.45s var(--ease-out) both;
   animation-delay: calc(var(--order) * 160ms + 160ms);
 }
-.trace-marker { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; border: 1.5px solid var(--tone, var(--rule-strong)); background: var(--paper); position: relative; }
+.trace-marker { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; border: 1.5px solid var(--tone, var(--rule-strong)); background: var(--bg); position: relative; }
 .trace-step.tone-ok .trace-marker { background: var(--tone); }
 .trace-step.tone-active .trace-marker::after {
   content: "";
@@ -254,7 +260,7 @@
   border: 1px solid var(--rule-strong);
   border-radius: 2px;
   color: var(--ink-2);
-  background: var(--field);
+  background: var(--surface);
 }
 .trace-chip.is-primary { border-color: var(--accent); color: var(--accent); }
 .trace-chips { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -299,7 +305,7 @@
   border-radius: 3px;
   background:
     radial-gradient(circle, color-mix(in srgb, var(--rule-strong) 55%, transparent) 0.8px, transparent 1.2px) 0 0 / 18px 18px,
-    var(--field);
+    var(--surface);
   overflow: hidden;
 }
 .mg-svg { display: block; width: 100%; height: clamp(320px, 56vh, 540px); touch-action: none; cursor: grab; user-select: none; }
@@ -319,13 +325,13 @@
   animation-delay: var(--delay, 0ms);
   transition: stroke 0.25s, opacity 0.25s;
 }
-.mg-edge.is-cycle { stroke: color-mix(in srgb, var(--warn) 75%, var(--paper)); }
+.mg-edge.is-cycle { stroke: color-mix(in srgb, var(--warn) 75%, var(--bg)); }
 .mg-edge.is-lit { stroke: var(--accent); }
 .mg-edge.is-lit.is-cycle { stroke: var(--warn); }
 .mg-edge.is-dim { opacity: 0.18; }
 .mg-flow {
   fill: none;
-  stroke: var(--paper);
+  stroke: var(--bg);
   stroke-width: 1.2;
   stroke-dasharray: 3 9;
   stroke-linecap: round;
@@ -338,7 +344,7 @@
 
 .mg-node { cursor: pointer; outline: none; }
 .mg-node-body { animation: node-in 0.5s var(--ease-out) both; animation-delay: var(--delay, 0ms); transition: opacity 0.25s; }
-.mg-node rect:first-child { fill: var(--paper); stroke: var(--rule-strong); stroke-width: 1; transition: fill 0.2s, stroke 0.2s; }
+.mg-node rect:first-child { fill: var(--bg); stroke: var(--rule-strong); stroke-width: 1; transition: fill 0.2s, stroke 0.2s; }
 .mg-node .mg-stack { fill: var(--rule-strong); }
 .mg-node text { font-family: var(--mono); font-size: 11px; fill: var(--ink); pointer-events: none; }
 .mg-node.is-cycle rect:first-child { stroke: var(--warn); stroke-dasharray: 4 3; }
@@ -382,10 +388,10 @@
   border-radius: 2px;
   outline: none;
 }
-.chart-bars li:hover, .chart-bars li:focus-visible { background: var(--paper-2); }
+.chart-bars li:hover, .chart-bars li:focus-visible { background: var(--bg-sunk); }
 .chart-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chart-name a { font-size: 12px; }
-.chart-track { height: 7px; background: var(--paper-2); overflow: hidden; border-radius: 1px; }
+.chart-track { height: 7px; background: var(--bg-sunk); overflow: hidden; border-radius: 1px; }
 .chart-track > span {
   display: block;
   height: 100%;
@@ -407,7 +413,7 @@
   padding: 5px 8px;
   border-radius: 3px;
   background: var(--ink);
-  color: var(--paper);
+  color: var(--bg);
   font-size: 12px;
   line-height: 1.4;
   pointer-events: none;
@@ -445,16 +451,16 @@
 }
 
 .sys-node { cursor: pointer; outline: none; }
-.sys-node rect { fill: var(--paper); stroke: var(--rule-strong); stroke-width: 1.2; transition: fill 0.35s, stroke 0.35s, opacity 0.35s; }
+.sys-node rect { fill: var(--bg); stroke: var(--rule-strong); stroke-width: 1.2; transition: fill 0.35s, stroke 0.35s, opacity 0.35s; }
 .sys-node.is-external rect { stroke-dasharray: 4 3; }
 .sys-node .sys-title { font-family: var(--sans); font-size: 13.5px; font-weight: 600; fill: var(--ink-2); transition: fill 0.35s; }
 .sys-node .sys-sub, .sys-sub { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
 .sys-lane { font-family: var(--mono); font-size: 10px; fill: var(--muted); letter-spacing: 0.02em; }
-.sys-node.is-lit rect { stroke: var(--accent); fill: color-mix(in srgb, var(--accent) 7%, var(--paper)); }
+.sys-node.is-lit rect { stroke: var(--accent); fill: color-mix(in srgb, var(--accent) 7%, var(--bg)); }
 .sys-node.is-lit .sys-title { fill: var(--ink); }
 .sys-node.is-lit:not(.sys-bus) rect { animation: visit 0.9s var(--ease-out) both; animation-delay: calc(var(--step) * 150ms); }
 .sys-node.is-about rect, .sys-node:focus-visible rect { stroke-width: 2.2; }
-.sys-node.is-off rect { fill: var(--paper-2); stroke: var(--muted); stroke-dasharray: 3 3; opacity: 0.7; animation: none; }
+.sys-node.is-off rect { fill: var(--bg-sunk); stroke: var(--muted); stroke-dasharray: 3 3; opacity: 0.7; animation: none; }
 .sys-node.is-off .sys-title { fill: var(--muted); }
 .sys-node.is-off .sys-sub { fill: var(--warn); }
 .sys-off-note { fill: var(--warn); }
@@ -525,9 +531,7 @@
   .pipe-stage.is-active .pipe-node::after,
   .trace-step.tone-active .trace-marker::after,
   .mg-flow,
-  .sys-arrowhead { fill: var(--rule-strong); }
-.sys-arrowhead.is-lit { fill: var(--accent); }
-.sys-edge-flow { display: none; }
+  .sys-edge-flow { display: none; }
   .pipe-bar.is-indeterminate > span { animation: none; width: 100%; opacity: 0.35; }
   .pipe-beacon { animation: none; }
 }

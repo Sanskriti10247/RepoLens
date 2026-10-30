@@ -21,7 +21,7 @@ export function SiteNav() {
           {text}
         </Link>
       ))}
-      <a href="/api/docs" target="_blank" rel="noreferrer">
+      <a href="/api/docs" target="_blank" rel="noreferrer" className="api-docs">
         API docs<span className="ext" aria-hidden="true">↗</span>
       </a>
     </nav>
@@ -31,7 +31,19 @@ export function SiteNav() {
 /** One line on what this instance can and cannot do, so missing buttons are not a mystery. */
 export function InstanceNote() {
   const { readOnly, sandbox } = useCapabilities();
-  if (readOnly === true) return <p className="instance-note">Read-only demo. Recorded analyses only.</p>;
-  if (sandbox === false) return <p className="instance-note">No test sandbox on this instance. Analysis and impact work; test runs do not.</p>;
+  if (readOnly === true) {
+    return (
+      <p className="instance-note">
+        <strong>Read-only demo.</strong> Recorded analyses only.
+      </p>
+    );
+  }
+  if (sandbox === false) {
+    return (
+      <p className="instance-note">
+        <strong>No test sandbox here.</strong> Analysis, reports and impact work; test runs do not.
+      </p>
+    );
+  }
   return null;
 }

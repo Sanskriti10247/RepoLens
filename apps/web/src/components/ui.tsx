@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 import type { ApiError } from "@/lib/api";
 import { formatClock, formatRelative, formatTime, label, toneFor } from "@/lib/format";
+import { useCountUp } from "@/lib/motion";
 
 /** A status as a small square and plain text; colour is a hint, the word carries the meaning. */
 export function Badge({ value, text }: { value: string | null | undefined; text?: string }) {
@@ -16,11 +17,51 @@ export function Badge({ value, text }: { value: string | null | undefined; text?
   );
 }
 
-export function Loading({ what = "Loading" }: { what?: string }) {
+type SkeletonShape = "lines" | "table" | "stats" | "block";
+
+/**
+ * Work in flight, drawn as the shape of what will replace it (a table, a row of figures, a
+ * chart) so the page does not jump when the data lands. The words are for screen readers.
+ */
+export function Loading({ what = "Loading", shape = "lines", rows = 3 }: { what?: string; shape?: SkeletonShape; rows?: number }) {
   return (
-    <p className="loading" role="status">
-      {what}…
-    </p>
+    <div className={`skeleton skeleton-${shape}`} role="status">
+      <span className="sr-only">{what}…</span>
+      <SkeletonShapes shape={shape} rows={rows} />
+    </div>
+  );
+}
+
+function SkeletonShapes({ shape, rows }: { shape: SkeletonShape; rows: number }) {
+  if (shape === "block") return <span className="sk sk-block" aria-hidden="true" />;
+  if (shape === "stats") {
+    return (
+      <span className="sk-stats" aria-hidden="true">
+        {Array.from({ length: rows }, (_, i) => (
+          <span key={i} className="sk" />
+        ))}
+      </span>
+    );
+  }
+  if (shape === "table") {
+    return (
+      <>
+        {Array.from({ length: rows }, (_, i) => (
+          <span key={i} className="sk-row" aria-hidden="true">
+            <span className="sk" style={{ width: `${88 - ((i * 17) % 40)}%` }} />
+            <span className="sk" style={{ width: "60%" }} />
+            <span className="sk" style={{ width: "40%" }} />
+          </span>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {Array.from({ length: rows }, (_, i) => (
+        <span key={i} className="sk sk-line" aria-hidden="true" style={{ width: `${92 - ((i * 23) % 45)}%` }} />
+      ))}
+    </>
   );
 }
 
@@ -64,18 +105,23 @@ export function FailureNote({ children }: { children: ReactNode }) {
   return <div className="error-note">{children}</div>;
 }
 
-/** A section of a page: a ruled heading and its content. No box. */
+/** A section of a page: a numbered, ruled heading and its content. No box. */
 export function Card({
   title,
   actions,
   children,
+  id,
+  className,
 }: {
   title?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
+  /** Anchor for the page rail. */
+  id?: string;
+  className?: string;
 }) {
   return (
-    <section className="section">
+    <section className={className ? `section ${className}` : "section"} id={id}>
       {(title || actions) && (
         <header className="section-head">
           {title && <h2>{title}</h2>}
@@ -107,10 +153,65 @@ export function Stats({ children }: { children: ReactNode }) {
 export function Stat({ label: name, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
     <div className="stat">
-      <div className="stat-value">{typeof value === "number" ? value.toLocaleString("en-US") : value}</div>
+      <div className="stat-value">{typeof value === "number" ? <Ticker value={value} /> : value}</div>
       <div className="stat-label">{name}</div>
       {hint && <div className="stat-hint">{hint}</div>}
     </div>
+  );
+}
+
+/**
+ * A number that counts up from zero when it first appears and glides to new values after.
+ * Assistive technology reads the final value only.
+ */
+export function Ticker({ value, decimals = 0, suffix = "" }: { value: number; decimals?: number; suffix?: string }) {
+  const shown = useCountUp(value);
+  const format = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + suffix;
+  return (
+    <span className="ticker num">
+      <span aria-hidden="true">{format(shown)}</span>
+      <span className="sr-only">{format(value)}</span>
+    </span>
+  );
+}
+
+/** The title block of a top-level page: a small running head, the title and a lede. */
+export function PageHead({ eyebrow, title, lede, children }: { eyebrow?: ReactNode; title: ReactNode; lede?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="page-head">
+      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+      <h1>{title}</h1>
+      {lede && <p className="lede">{lede}</p>}
+      {children}
+    </div>
+  );
+}
+
+/**
+ * A term with a short explanation that opens on hover, keyboard focus or a tap. The
+ * explanation is also the term's accessible description.
+ */
+export function Tip({ children, tip }: { children: ReactNode; tip: ReactNode }) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  return (
+    <span className={open ? "tip is-open" : "tip"}>
+      <button
+        type="button"
+        className="tip-term"
+        aria-describedby={id}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+      >
+        {children}
+      </button>
+      <span role="tooltip" id={id} className="tip-body">
+        {tip}
+      </span>
+    </span>
   );
 }
 
